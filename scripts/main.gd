@@ -721,6 +721,48 @@ func _show_cities() -> void:
 			region_metrics.text = "%s GDP  •  QoL %.1f" % [_money(float(region.get("gdp", 0.0))), float(region.get("average_quality_of_life", 0.0))]
 			region_metrics.add_theme_color_override("font_color", MUTED)
 			region_row.add_child(region_metrics)
+			region_row.add_child(_button("MANAGE", BLUE, func(name: String = str(region.get("name", ""))):
+				GameState.selected_region_name = name
+				_show_cities()
+			))
+	var region_detail := GameState.get_region_detail(GameState.selected_region_name)
+	if not region_detail.is_empty():
+		var management_panel := PanelContainer.new()
+		management_panel.add_theme_stylebox_override("panel", _style(PANEL_ALT, CYAN, 1, 10))
+		body.add_child(management_panel)
+		var management_box := VBoxContainer.new()
+		management_box.add_theme_constant_override("separation", 7)
+		management_panel.add_child(management_box)
+		management_box.add_child(_section_label("REGIONAL GOVERNMENT  /  " + GameState.selected_region_name.to_upper()))
+		management_box.add_child(_muted_label("%d cities  •  %s residents  •  %s GDP  •  QoL %.1f  •  Employment %.1f%%" % [int(region_detail.get("city_count", 0)), _format_number(int(region_detail.get("population", 0))), _money(float(region_detail.get("gdp", 0.0))), float(region_detail.get("average_quality_of_life", 0.0)), float(region_detail.get("average_employment", 0.0))]))
+		management_box.add_child(_muted_label("Regional development fund: " + _money(float(region_detail.get("funds", 0.0)))))
+		var allocation_row := HBoxContainer.new()
+		allocation_row.add_theme_constant_override("separation", 8)
+		management_box.add_child(allocation_row)
+		var allocation := SpinBox.new()
+		allocation.min_value = 1000000
+		allocation.max_value = maxf(treasury, 1000000.0)
+		allocation.step = 1000000
+		allocation.value = minf(10000000.0, maxf(treasury, 1000000.0))
+		allocation.prefix = "$"
+		allocation.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		allocation_row.add_child(allocation)
+		allocation_row.add_child(_button("ALLOCATE FUNDS", GREEN, func():
+			if GameState.allocate_region_budget(GameState.selected_region_name, allocation.value):
+				_show_cities()
+			else:
+				_show_toast("Budget allocation failed: check national treasury and amount.")
+		))
+		var investment_row := HFlowContainer.new()
+		investment_row.add_theme_constant_override("h_separation", 7)
+		management_box.add_child(investment_row)
+		for category in ["roads", "power", "housing", "health", "education"]:
+			investment_row.add_child(_button("UPGRADE " + category.to_upper(), PANEL, func(kind: String = category):
+				if GameState.invest_in_region(GameState.selected_region_name, kind):
+					_show_cities()
+				else:
+					_show_toast("Regional fund is insufficient or all cities reached the level cap.")
+			))
 	var city_map := Control.new()
 	city_map.set_script(load("res://scripts/city_map.gd"))
 	city_map.custom_minimum_size = Vector2(0, 230)

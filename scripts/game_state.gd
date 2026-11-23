@@ -10,6 +10,8 @@ const COUNTRY_DATA_PATH := "res://data/countries_110m.json"
 const CITY_DATA_PATH := "res://data/major_cities.json"
 var cities: Array[Dictionary] = []
 var selected_city_id: String = ""
+var regional_funds: Dictionary = {}
+var selected_region_name: String = ""
 var infrastructure: Dictionary = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 var city_catalog: Array[Dictionary] = []
 
@@ -152,6 +154,56 @@ func _run_monthly_city_simulation() -> void:
 		city["development_index"] = minf(100.0, float(city.get("development_index", 25.0)) + infrastructure_score * 0.035)
 		city["quality_of_life"] = clampf(float(city.get("quality_of_life", 58.0)) + (health + housing) * 0.004 - maxf(inflation - 4.0, 0.0) * 0.01, 10.0, 100.0)
 		cities[index] = city
+
+
+func get_region_detail(region_name: String) -> Dictionary:
+	for region in get_regions():
+		if str(region.get("name", "")) == region_name:
+			var detail: Dictionary = region.duplicate(true)
+			detail["funds"] = float(regional_funds.get(region_name, 0.0))
+			detail["cities_data"] = []
+			for city in cities:
+				if str(city.get("region", "")) == region_name:
+					detail["cities_data"].append(city.duplicate(true))
+			return detail
+	return {}
+
+func allocate_region_budget(region_name: String, amount: float) -> bool:
+	if region_name.is_empty() or amount < 1000000.0 or amount > treasury:
+		return false
+	regional_funds[region_name] = float(regional_funds.get(region_name, 0.0)) + amount
+	treasury -= amount
+	state_changed.emit()
+	return true
+
+func invest_in_region(region_name: String, category: String) -> bool:
+	var allowed := ["roads", "power", "housing", "health", "education"]
+	if not allowed.has(category):
+		return false
+	var target_index := -1
+	var lowest_level := 999
+	for index in range(cities.size()):
+		var city: Dictionary = cities[index]
+		if str(city.get("region", "")) != region_name:
+			continue
+		var level := int(city.get(category, 1))
+		if level < lowest_level and level < 30:
+			lowest_level = level
+			target_index = index
+	if target_index < 0:
+		return false
+	var target: Dictionary = cities[target_index]
+	var cost := maxf(float(target.get("gdp", 0.0)) * 0.00008 * float(lowest_level + 1), 5000000.0)
+	var funds := float(regional_funds.get(region_name, 0.0))
+	if funds < cost:
+		return false
+	regional_funds[region_name] = funds - cost
+	target[category] = lowest_level + 1
+	target["development_index"] = minf(100.0, float(target.get("development_index", 25.0)) + 1.2)
+	target["quality_of_life"] = minf(100.0, float(target.get("quality_of_life", 58.0)) + (0.35 if category == "health" or category == "housing" else 0.15))
+	cities[target_index] = target
+	state_changed.emit()
+	return true
 
 
 var game_mode: String = "Career"
@@ -761,7 +813,7 @@ func save_game() -> bool:
 		"market_prices": market_prices, "trade_exports": trade_exports,
 		"trade_imports": trade_imports, "trade_balance": trade_balance,
 		"trade_tariff_rate": trade_tariff_rate, "last_trade_report": last_trade_report,
-		"infrastructure": infrastructure, "cities": cities, "selected_city_id": selected_city_id
+		"infrastructure": infrastructure, "cities": cities, "selected_city_id": selected_city_id,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -830,6 +882,8 @@ func load_game() -> bool:
 		if typeof(city_data) == TYPE_DICTIONARY:
 			cities.append(city_data)
 	selected_city_id = str(data.get("selected_city_id", ""))
+	regional_funds = data.get("regional_funds", {})
+	selected_region_name = str(data.get("selected_region_name", ""))
 	if cities.is_empty() and not selected_country.is_empty():
 		_initialize_cities(selected_country)
 	diplomacy_relations = data.get("diplomacy_relations", {})
