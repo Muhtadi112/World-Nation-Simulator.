@@ -166,6 +166,7 @@ func _advance_day() -> void:
 		_run_monthly_economy()
 		_run_monthly_industry()
 		_run_monthly_infrastructure()
+		_run_monthly_city_simulation()
 		_update_market_prices()
 		_run_ai_world_simulation()
 		_run_diplomacy_monthly_effects()
@@ -579,6 +580,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	trade_tariff_rate = 0.05
 	last_trade_report = "No trade transactions yet."
 	infrastructure = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
+	_initialize_cities(country)
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
 	tanks = maxi(100, int(gdp / 1800000000.0))
 	aircraft = maxi(40, int(gdp / 5500000000.0))
@@ -611,7 +613,7 @@ func save_game() -> bool:
 		"market_prices": market_prices, "trade_exports": trade_exports,
 		"trade_imports": trade_imports, "trade_balance": trade_balance,
 		"trade_tariff_rate": trade_tariff_rate, "last_trade_report": last_trade_report,
-		"infrastructure": infrastructure
+		"infrastructure": infrastructure, "cities": cities, "selected_city_id": selected_city_id
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -675,6 +677,13 @@ func load_game() -> bool:
 	trade_tariff_rate = float(data.get("trade_tariff_rate", 0.05))
 	last_trade_report = str(data.get("last_trade_report", "No trade transactions yet."))
 	infrastructure = data.get("infrastructure", {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12})
+	cities.clear()
+	for city_data in data.get("cities", []):
+		if typeof(city_data) == TYPE_DICTIONARY:
+			cities.append(city_data)
+	selected_city_id = str(data.get("selected_city_id", ""))
+	if cities.is_empty() and not selected_country.is_empty():
+		_initialize_cities(selected_country)
 	diplomacy_relations = data.get("diplomacy_relations", {})
 	if diplomacy_relations.is_empty():
 		_initialize_diplomacy()
