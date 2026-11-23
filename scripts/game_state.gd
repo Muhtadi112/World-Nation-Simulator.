@@ -172,9 +172,15 @@ func _run_monthly_economy() -> void:
 	stability = clampf(stability + (monthly_balance / maxf(gdp / 12.0, 1.0)) * 1.5 - maxf(0.0, inflation - 8.0) * 0.08, 0.0, 100.0)
 	annual_gdp_growth = clampf(annual_gdp_growth + (stability - 60.0) * 0.001 - maxf(0.0, inflation - 5.0) * 0.01, -15.0, 20.0)
 
+func _update_budget_forecast() -> void:
+	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0
+	monthly_expenses = maxf(0.0, gdp) * spending_rate / 12.0
+	monthly_balance = monthly_revenue - monthly_expenses
+
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
 	tax_rate = clampf(new_tax_rate, 0.05, 0.40)
 	spending_rate = clampf(new_spending_rate, 0.05, 0.45)
+	_update_budget_forecast()
 	state_changed.emit()
 
 func start_new_game(mode: String, country: Dictionary) -> void:
@@ -190,9 +196,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	debt = gdp * 0.35
 	tax_rate = 0.18
 	spending_rate = 0.165
-	monthly_revenue = 0.0
-	monthly_expenses = 0.0
-	monthly_balance = 0.0
+	_update_budget_forecast()
 	annual_gdp_growth = 3.2
 	stability = 72.0
 	state_changed.emit()
@@ -247,6 +251,7 @@ func load_game() -> bool:
 	monthly_balance = float(data.get("monthly_balance", 0.0))
 	annual_gdp_growth = float(data.get("annual_gdp_growth", 3.2))
 	stability = float(data.get("stability", 72.0))
+	_update_budget_forecast()
 	state_changed.emit()
 	return not selected_country.is_empty()
 
