@@ -736,20 +736,29 @@ func _show_transport() -> void:
 			to_picker.select(1)
 		selectors.add_child(from_picker)
 		selectors.add_child(to_picker)
+		var mode_picker := OptionButton.new()
+		mode_picker.add_item("Road")
+		mode_picker.add_item("Rail")
+		mode_picker.add_item("Air")
+		mode_picker.add_item("Sea")
+		builder_box.add_child(mode_picker)
 		var estimate := _muted_label("")
 		builder_box.add_child(estimate)
 		var update_estimate := func() -> void:
 			var a := str(GameState.cities[from_picker.selected].get("id", ""))
 			var b := str(GameState.cities[to_picker.selected].get("id", ""))
-			var cost := GameState.transport_route_cost(a, b)
-			estimate.text = "Estimated construction cost: %s" % (_money(cost) if cost >= 0.0 else "Route unavailable / already connected")
+			var mode := ["road", "rail", "air", "sea"][mode_picker.selected]
+			var cost := GameState.transport_route_cost(a, b, mode)
+			estimate.text = "Estimated %s construction cost: %s" % [mode.to_upper(), _money(cost) if cost >= 0.0 else "Unavailable: build both terminals or check existing route"]
 		from_picker.item_selected.connect(func(_index: int): update_estimate.call())
 		to_picker.item_selected.connect(func(_index: int): update_estimate.call())
+		mode_picker.item_selected.connect(func(_index: int): update_estimate.call())
 		update_estimate.call()
 		builder_box.add_child(_button("CONSTRUCT ROAD CONNECTION", BLUE, func():
 			var a := str(GameState.cities[from_picker.selected].get("id", ""))
 			var b := str(GameState.cities[to_picker.selected].get("id", ""))
-			if GameState.build_transport_route(a, b):
+			var mode := ["road", "rail", "air", "sea"][mode_picker.selected]
+			if GameState.build_transport_route(a, b, mode):
 				_show_transport()
 			else:
 				_show_toast("Construction failed: choose two different unconnected cities and check treasury.")
@@ -772,9 +781,39 @@ func _show_transport() -> void:
 			rows.add_child(panel)
 			var info := VBoxContainer.new()
 			panel.add_child(info)
-			info.add_child(_muted_label("%s  ↔  %s" % [route.get("from_name", "City"), route.get("to_name", "City")]))
+			info.add_child(_muted_label("%s  ↔  %s  •  %s" % [route.get("from_name", "City"), route.get("to_name", "City"), str(route.get("mode", "road")).to_upper()]))
 			info.add_child(_muted_label("%.0f km  •  Road level %d  •  Traffic %.0f / %.0f  •  Congestion %.1f%%" % [float(route.get("distance_km", 0.0)), int(route.get("road_level", 1)), float(route.get("traffic", 0.0)), float(route.get("capacity", 80000.0)), float(route.get("congestion", 0.0))]))
-	body.add_child(_muted_label("Transport is a strategic prototype: route distance uses city coordinates; traffic and capacity are simplified estimates, not turn-by-turn pathfinding or real road geometry."))
+	var terminal_panel := PanelContainer.new()
+	terminal_panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 10))
+	body.add_child(terminal_panel)
+	var terminal_box := VBoxContainer.new()
+	terminal_box.add_child(_section_label("RAIL STATIONS  /  AIRPORTS  /  SEAPORTS"))
+	terminal_panel.add_child(terminal_box)
+	var terminal_city := OptionButton.new()
+	for city in GameState.cities:
+		terminal_city.add_item(str(city.get("name", "City")))
+	terminal_box.add_child(terminal_city)
+	var terminal_stats := _muted_label("")
+	terminal_box.add_child(terminal_stats)
+	var refresh_terminals := func() -> void:
+		if GameState.cities.is_empty():
+			terminal_stats.text = "No cities available."
+			return
+		var city: Dictionary = GameState.cities[terminal_city.selected]
+		terminal_stats.text = "Rail L%d  •  Airport L%d  •  Seaport L%d" % [int(city.get("rail_station", 0)), int(city.get("airport", 0)), int(city.get("seaport", 0))]
+	terminal_city.item_selected.connect(func(_index: int): refresh_terminals.call())
+	refresh_terminals.call()
+	var terminal_buttons := HFlowContainer.new()
+	terminal_box.add_child(terminal_buttons)
+	for facility in ["rail_station", "airport", "seaport"]:
+		terminal_buttons.add_child(_button("UPGRADE " + facility.to_upper().replace("_", " "), BLUE, func(kind: String = facility):
+			var city_id := str(GameState.cities[terminal_city.selected].get("id", ""))
+			if GameState.upgrade_transport_facility(city_id, kind):
+				_show_transport()
+			else:
+				_show_toast("Upgrade failed: insufficient funds or facility level cap reached.")
+		))
+	body.add_child(_muted_label("Transport is a strategic prototype: route distance uses city coordinates; traffic and capacity are simplified estimates, not turn-by-turn pathfinding or real road geometry. Rail, air and sea routes require matching terminals at both cities."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_cities() -> void:

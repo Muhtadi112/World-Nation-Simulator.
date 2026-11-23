@@ -74,7 +74,8 @@ func _initialize_cities(country: Dictionary) -> void:
 			"lon": float(entry.get("lon", 0.0)),
 			"roads": 2, "power": 2, "housing": 2, "health": 1, "education": 1,
 			"zones": {"residential": 2, "industrial": 1, "commercial": 1, "government": 1},
-			"buildings": [], "land_value": maxf(100.0, city_gdp / maxf(float(city_population), 1.0) * 0.12)
+			"buildings": [], "land_value": maxf(100.0, city_gdp / maxf(float(city_population), 1.0) * 0.12),
+			"rail_station": 0, "airport": 0, "seaport": 0
 		})
 	if not cities.is_empty():
 		selected_city_id = str(cities[0].get("id", ""))
@@ -121,34 +122,62 @@ func _city_distance_km(city_a: Dictionary, city_b: Dictionary) -> float:
 	var haversine := pow(sin(delta_lat * 0.5), 2.0) + cos(lat_a) * cos(lat_b) * pow(sin(delta_lon * 0.5), 2.0)
 	return 6371.0 * 2.0 * asin(sqrt(clampf(haversine, 0.0, 1.0)))
 
-func transport_route_cost(from_city_id: String, to_city_id: String) -> float:
-	if from_city_id == to_city_id:
+func transport_facility_cost(city_id: String, facility: String) -> float:
+	if not ["rail_station", "airport", "seaport"].has(facility):
+		return -1.0
+	var city := get_city(city_id)
+	if city.is_empty():
+		return -1.0
+	var level := int(city.get(facility, 0))
+	if level >= 10:
+		return -1.0
+	var multiplier := {"rail_station": 0.00045, "airport": 0.0009, "seaport": 0.0007}
+	return maxf(float(city.get("gdp", 0.0)) * float(multiplier[facility]) * float(level + 1), 15000000.0)
+
+func upgrade_transport_facility(city_id: String, facility: String) -> bool:
+	var cost := transport_facility_cost(city_id, facility)
+	if cost < 0.0 or treasury < cost:
+		return false
+	for index in range(cities.size()):
+		if str(cities[index].get("id", "")) == city_id:
+			cities[index][facility] = int(cities[index].get(facility, 0)) + 1
+			treasury -= cost
+			state_changed.emit()
+			return true
+	return false
+
+func transport_route_cost(from_city_id: String, to_city_id: String, mode: String = "road") -> float:
+	if from_city_id == to_city_id or not ["road", "rail", "air", "sea"].has(mode):
 		return -1.0
 	var from_city := get_city(from_city_id)
 	var to_city := get_city(to_city_id)
 	if from_city.is_empty() or to_city.is_empty():
 		return -1.0
 	for route in transport_routes:
-		if (str(route.get("from", "")) == from_city_id and str(route.get("to", "")) == to_city_id) or (str(route.get("from", "")) == to_city_id and str(route.get("to", "")) == from_city_id):
+		if str(route.get("mode", "road")) == mode and ((str(route.get("from", "")) == from_city_id and str(route.get("to", "")) == to_city_id) or (str(route.get("from", "")) == to_city_id and str(route.get("to", "")) == from_city_id)):
 			return -1.0
-	return maxf(_city_distance_km(from_city, to_city) * 180000.0, 10000000.0)
+	var required_facility := {"rail": "rail_station", "air": "airport", "sea": "seaport"}.get(mode, "")
+	if not required_facility.is_empty() and (int(from_city.get(required_facility, 0)) < 1 or int(to_city.get(required_facility, 0)) < 1):
+		return -1.0
+	var mode_multiplier := {"road": 180000.0, "rail": 320000.0, "air": 520000.0, "sea": 260000.0}
+	return maxf(_city_distance_km(from_city, to_city) * float(mode_multiplier[mode]), 10000000.0)
 
-func build_transport_route(from_city_id: String, to_city_id: String) -> bool:
-	if transport_routes.size() >= 250:
+func build_transport_route(from_city_id: String, to_city_id: String, mode: String = "road") -> bool:
+	if transport_routes.size() >= 500:
 		return false
-	var cost := transport_route_cost(from_city_id, to_city_id)
+	var cost := transport_route_cost(from_city_id, to_city_id, mode)
 	if cost < 0.0 or treasury < cost:
 		return false
 	var from_city := get_city(from_city_id)
 	var to_city := get_city(to_city_id)
 	transport_routes.append({
-		"id": from_city_id + "__" + to_city_id,
-		"from": from_city_id, "to": to_city_id,
+		"id": from_city_id + "__" + mode + "__" + to_city_id,
+		"from": from_city_id, "to": to_city_id, "mode": mode,
 		"from_name": str(from_city.get("name", "City")),
 		"to_name": str(to_city.get("name", "City")),
 		"distance_km": _city_distance_km(from_city, to_city),
 		"road_level": 1, "traffic": 0.0, "congestion": 0.0,
-		"capacity": 80000.0, "status": "Operational"
+		"capacity": 80000.0 if mode == "road" else (120000.0 if mode == "rail" else 45000.0), "status": "Operational"
 	})
 	treasury -= cost
 	state_changed.emit()
@@ -163,9 +192,12 @@ func _run_monthly_transport_simulation() -> void:
 		var to_city := get_city(str(route.get("to", "")))
 		if from_city.is_empty() or to_city.is_empty():
 			continue
+		var mode := str(route.get("mode", "road"))
 		var road_level := maxi(1, int(route.get("road_level", 1)))
-		var traffic := float(int(from_city.get("population", 0)) + int(to_city.get("population", 0))) * 0.025
-		var capacity := 80000.0 * float(road_level)
+		var mode_factor := {"road": 1.0, "rail": 0.55, "air": 0.18, "sea": 0.30}.get(mode, 1.0)
+		var traffic := float(int(from_city.get("population", 0)) + int(to_city.get("population", 0))) * 0.025 * float(mode_factor)
+		var base_capacity := {"road": 80000.0, "rail": 150000.0, "air": 55000.0, "sea": 110000.0}.get(mode, 80000.0)
+		var capacity := float(base_capacity) * float(road_level)
 		var congestion := clampf((traffic / maxf(capacity, 1.0) - 0.65) * 100.0, 0.0, 100.0)
 		route["traffic"] = traffic
 		route["capacity"] = capacity
