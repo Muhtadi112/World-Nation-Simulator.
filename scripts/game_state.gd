@@ -246,6 +246,9 @@ func upgrade_city(city_id: String, category: String) -> bool:
 	return false
 
 func _run_monthly_city_simulation() -> void:
+	if cities.is_empty():
+		return
+	var satisfaction_total := 0.0
 	for index in range(cities.size()):
 		var city: Dictionary = cities[index]
 		if not city.has("zones"):
@@ -262,7 +265,17 @@ func _run_monthly_city_simulation() -> void:
 		city["building_jobs"] = building_jobs
 		city["building_output"] = building_output
 		var zones: Dictionary = city.get("zones", {})
-		var zone_bonus := (float(zones.get("residential", 1)) + float(zones.get("industrial", 1)) + float(zones.get("commercial", 1))) * 0.00008
+		var population_now := maxf(float(city.get("population", 10000)), 1.0)
+		var housing_level := float(city.get("housing", 1))
+		var residential_zones := float(zones.get("residential", 1))
+		var housing_capacity_ratio := 0.90 + housing_level * 0.045 + residential_zones * 0.025
+		var housing_pressure := population_now / maxf(population_now * housing_capacity_ratio, 1.0) * 100.0
+		var food_need := population_now * 0.025
+		var food_security := clampf(float(resource_stockpiles.get("food", 0.0)) / maxf(food_need, 1.0) * 100.0, 0.0, 100.0)
+		var health_access := clampf(42.0 + float(city.get("health", 1)) * 7.0, 0.0, 100.0)
+		var education_access := clampf(38.0 + float(city.get("education", 1)) * 8.0, 0.0, 100.0)
+		var housing_affordability := clampf(112.0 - maxf(housing_pressure - 90.0, 0.0) * 1.25 - maxf(float(city.get("land_value", 100.0)) / maxf(float(city.get("gdp", 1.0)) / population_now * 0.12, 1.0) - 1.0, 0.0) * 8.0, 10.0, 100.0)
+		var zones_bonus := (float(zones.get("residential", 1)) + float(zones.get("industrial", 1)) + float(zones.get("commercial", 1))) * 0.00008
 		city["land_value"] = maxf(10.0, float(city.get("land_value", 100.0)) * (1.0 + 0.001 + float(city.get("development_index", 25.0)) * 0.00001))
 		var roads := float(city.get("roads", 1))
 		var education := float(city.get("education", 1))
@@ -270,12 +283,36 @@ func _run_monthly_city_simulation() -> void:
 		var housing := float(city.get("housing", 1))
 		var transport_effect := float(city.get("transport_access", 20.0)) / 100.0 * 0.00025
 		var infrastructure_score := (roads + education + health + housing + float(city.get("power", 1))) / 150.0 + transport_effect
-		var growth := clampf(0.00045 + infrastructure_score * 0.00035, 0.0002, 0.0012)
-		city["population"] = maxi(10000, int(float(city.get("population", 10000)) * (1.0 + growth)))
-		city["gdp"] = float(city.get("gdp", 0.0)) * (1.0 + annual_gdp_growth / 1200.0 + infrastructure_score * 0.001 + zone_bonus) + building_output * 0.12
-		city["employment"] = clampf(float(city.get("employment", 94.0)) + 0.015 + education * 0.001 + float(building_jobs) / maxf(float(city.get("population", 1)), 1.0) * 0.02, 70.0, 99.5)
+		var satisfaction := clampf(float(city.get("quality_of_life", 58.0)) * 0.25 + food_security * 0.20 + housing_affordability * 0.20 + health_access * 0.18 + education_access * 0.17, 0.0, 100.0)
+		var natural_growth := clampf(0.00035 + health_access * 0.000002 + education_access * 0.000001 - maxf(0.0, 100.0 - food_security) * 0.000004, -0.0002, 0.0008)
+		var births := int(population_now * maxf(natural_growth + 0.00035, 0.0001))
+		var deaths := int(population_now * 0.00035)
+		city["housing_capacity"] = int(population_now * housing_capacity_ratio)
+		city["housing_pressure"] = housing_pressure
+		city["food_security"] = food_security
+		city["health_access"] = health_access
+		city["education_access"] = education_access
+		city["housing_affordability"] = housing_affordability
+		city["resident_satisfaction"] = satisfaction
+		city["births_monthly"] = births
+		city["deaths_monthly"] = deaths
+		city["monthly_migration"] = 0
+		city["employment"] = clampf(float(city.get("employment", 94.0)) + 0.01 + education * 0.0008 + float(building_jobs) / maxf(population_now, 1.0) * 0.02, 70.0, 99.5)
+		city["gdp"] = float(city.get("gdp", 0.0)) * (1.0 + annual_gdp_growth / 1200.0 + infrastructure_score * 0.001 + zones_bonus) + building_output * 0.12
 		city["development_index"] = minf(100.0, float(city.get("development_index", 25.0)) + infrastructure_score * 0.035)
-		city["quality_of_life"] = clampf(float(city.get("quality_of_life", 58.0)) + (health + housing) * 0.004 - maxf(inflation - 4.0, 0.0) * 0.01, 10.0, 100.0)
+		city["quality_of_life"] = clampf(float(city.get("quality_of_life", 58.0)) + (health + housing) * 0.003 + (satisfaction - 50.0) * 0.002 - maxf(inflation - 4.0, 0.0) * 0.01, 10.0, 100.0)
+		cities[index] = city
+		satisfaction_total += satisfaction
+	var average_satisfaction := satisfaction_total / float(cities.size())
+	for index in range(cities.size()):
+		var city: Dictionary = cities[index]
+		var population_now := maxf(float(city.get("population", 10000)), 1.0)
+		var satisfaction_gap := float(city.get("resident_satisfaction", average_satisfaction)) - average_satisfaction
+		var migration := int(clampf(satisfaction_gap * population_now * 0.00003, -population_now * 0.001, population_now * 0.001))
+		var births := int(city.get("births_monthly", 0))
+		var deaths := int(city.get("deaths_monthly", 0))
+		city["monthly_migration"] = migration
+		city["population"] = maxi(10000, int(population_now) + births - deaths + migration)
 		cities[index] = city
 
 
