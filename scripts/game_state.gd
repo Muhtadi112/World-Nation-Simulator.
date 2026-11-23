@@ -10,6 +10,7 @@ var game_mode: String = "Career"
 var selected_country: Dictionary = {}
 var country_catalog: Array[Dictionary] = []
 var ai_countries: Array[Dictionary] = []
+var diplomacy_relations: Dictionary = {}
 var game_date: Dictionary = {"year": 2026, "month": 1, "day": 1}
 var simulation_speed: int = 1
 var is_paused: bool = false
@@ -145,6 +146,7 @@ func _advance_day() -> void:
 	if month_changed:
 		_run_monthly_economy()
 		_run_ai_world_simulation()
+		_run_diplomacy_monthly_effects()
 	state_changed.emit()
 
 func _run_monthly_economy() -> void:
@@ -240,6 +242,120 @@ func get_ai_country(country_id: String) -> Dictionary:
 			return nation.duplicate(true)
 	return {}
 
+func _initialize_diplomacy() -> void:
+	diplomacy_relations.clear()
+	for nation in ai_countries:
+		var nation_id := str(nation.get("id", ""))
+		var seed_value := float(abs(nation_id.hash()) % 201) - 100.0
+		diplomacy_relations[nation_id] = {
+			"relation": clampf(seed_value * 0.35, -35.0, 35.0),
+			"trade_agreement": false,
+			"alliance": false,
+			"sanctions": false,
+			"at_war": false
+		}
+
+func get_diplomacy(country_id: String) -> Dictionary:
+	if not diplomacy_relations.has(country_id):
+		return {}
+	return (diplomacy_relations[country_id] as Dictionary).duplicate(true)
+
+func improve_relations(country_id: String) -> bool:
+	if not diplomacy_relations.has(country_id):
+		return false
+	var treaty: Dictionary = diplomacy_relations[country_id]
+	if bool(treaty.get("at_war", false)):
+		return false
+	var cost := maxf(gdp * 0.00015, 100000.0)
+	if treasury < cost:
+		return false
+	treasury -= cost
+	treaty["relation"] = clampf(float(treaty.get("relation", 0.0)) + 15.0, -100.0, 100.0)
+	diplomacy_relations[country_id] = treaty
+	state_changed.emit()
+	return true
+
+func establish_trade_agreement(country_id: String) -> bool:
+	if not diplomacy_relations.has(country_id):
+		return false
+	var treaty: Dictionary = diplomacy_relations[country_id]
+	if bool(treaty.get("at_war", false)) or bool(treaty.get("sanctions", false)) or float(treaty.get("relation", 0.0)) < -20.0:
+		return false
+	treaty["trade_agreement"] = true
+	diplomacy_relations[country_id] = treaty
+	state_changed.emit()
+	return true
+
+func establish_alliance(country_id: String) -> bool:
+	if not diplomacy_relations.has(country_id):
+		return false
+	var treaty: Dictionary = diplomacy_relations[country_id]
+	if bool(treaty.get("at_war", false)) or not bool(treaty.get("trade_agreement", false)) or float(treaty.get("relation", 0.0)) < 50.0:
+		return false
+	treaty["alliance"] = true
+	diplomacy_relations[country_id] = treaty
+	state_changed.emit()
+	return true
+
+func impose_sanctions(country_id: String) -> bool:
+	if not diplomacy_relations.has(country_id):
+		return false
+	var treaty: Dictionary = diplomacy_relations[country_id]
+	if bool(treaty.get("at_war", false)):
+		return false
+	treaty["sanctions"] = true
+	treaty["trade_agreement"] = false
+	treaty["alliance"] = false
+	treaty["relation"] = clampf(float(treaty.get("relation", 0.0)) - 20.0, -100.0, 100.0)
+	diplomacy_relations[country_id] = treaty
+	state_changed.emit()
+	return true
+
+func declare_war(country_id: String) -> bool:
+	if not diplomacy_relations.has(country_id):
+		return false
+	var treaty: Dictionary = diplomacy_relations[country_id]
+	if bool(treaty.get("at_war", false)):
+		return false
+	treaty["at_war"] = true
+	treaty["trade_agreement"] = false
+	treaty["alliance"] = false
+	treaty["sanctions"] = false
+	treaty["relation"] = -100.0
+	diplomacy_relations[country_id] = treaty
+	stability = maxf(0.0, stability - 8.0)
+	state_changed.emit()
+	return true
+
+func make_peace(country_id: String) -> bool:
+	if not diplomacy_relations.has(country_id):
+		return false
+	var treaty: Dictionary = diplomacy_relations[country_id]
+	if not bool(treaty.get("at_war", false)):
+		return false
+	treaty["at_war"] = false
+	treaty["relation"] = -35.0
+	diplomacy_relations[country_id] = treaty
+	state_changed.emit()
+	return true
+
+func _run_diplomacy_monthly_effects() -> void:
+	var active_trade_partners := 0
+	var active_wars := 0
+	for country_id in diplomacy_relations.keys():
+		var treaty: Dictionary = diplomacy_relations[country_id]
+		if bool(treaty.get("trade_agreement", false)) and not bool(treaty.get("at_war", false)):
+			active_trade_partners += 1
+			treaty["relation"] = clampf(float(treaty.get("relation", 0.0)) + 0.15, -100.0, 100.0)
+		if bool(treaty.get("at_war", false)):
+			active_wars += 1
+		diplomacy_relations[country_id] = treaty
+	var trade_income := gdp * 0.00012 * float(active_trade_partners)
+	var war_cost := gdp * 0.00025 * float(active_wars)
+	treasury = maxf(0.0, treasury + trade_income - war_cost)
+	if active_wars > 0:
+		stability = maxf(0.0, stability - 0.25 * float(active_wars))
+
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0
 	monthly_expenses = maxf(0.0, gdp) * spending_rate / 12.0
@@ -268,6 +384,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	annual_gdp_growth = 3.2
 	stability = 72.0
 	_initialize_ai_countries()
+	_initialize_diplomacy()
 	state_changed.emit()
 
 func save_game() -> bool:
@@ -282,7 +399,7 @@ func save_game() -> bool:
 		"debt": debt, "tax_rate": tax_rate, "spending_rate": spending_rate,
 		"monthly_revenue": monthly_revenue, "monthly_expenses": monthly_expenses,
 		"monthly_balance": monthly_balance, "annual_gdp_growth": annual_gdp_growth,
-		"stability": stability, "ai_countries": ai_countries
+		"stability": stability, "ai_countries": ai_countries, "diplomacy_relations": diplomacy_relations
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -326,6 +443,9 @@ func load_game() -> bool:
 			ai_countries.append(nation)
 	if ai_countries.is_empty():
 		_initialize_ai_countries()
+	diplomacy_relations = data.get("diplomacy_relations", {})
+	if diplomacy_relations.is_empty():
+		_initialize_diplomacy()
 	_update_budget_forecast()
 	state_changed.emit()
 	return not selected_country.is_empty()

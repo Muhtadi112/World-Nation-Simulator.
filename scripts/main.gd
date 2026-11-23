@@ -18,6 +18,7 @@ var selected_country: Dictionary = {}
 var current_screen: String = "home"
 var country_search_text: String = ""
 var country_results: VBoxContainer
+var selected_diplomacy_id: String = ""
 
 func _ready() -> void:
 	get_viewport().size_changed.connect(_on_viewport_resized)
@@ -31,6 +32,8 @@ func _on_viewport_resized() -> void:
 			"dashboard": _show_dashboard()
 			"budget": _show_budget()
 			"world": _show_world_nations()
+			"diplomacy": _show_diplomacy()
+			"diplomacy_detail": _show_diplomacy_detail()
 
 func _clear() -> void:
 	for child in get_children():
@@ -284,7 +287,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("National budget", PANEL_ALT, _show_budget))
 	side.add_child(_button("World nations / AI", PANEL_ALT, _show_world_nations))
 	side.add_child(_action_button("Cabinet & ministries", "Government simulation coming in Phase 2"))
-	side.add_child(_action_button("Diplomacy", "International relations coming in Phase 2"))
+	side.add_child(_button("Diplomacy & foreign affairs", PANEL_ALT, _show_diplomacy))
 	side.add_child(_section_label("DEVELOPMENT"))
 	side.add_child(_action_button("Infrastructure", "City construction coming in Phase 2"))
 	side.add_child(_action_button("Industry & trade", "Business simulation coming in Phase 2"))
@@ -331,6 +334,130 @@ func _show_world_nations() -> void:
 		people.add_theme_color_override("font_color", GREEN)
 		line.add_child(people)
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+func _show_diplomacy() -> void:
+	current_screen = "diplomacy"
+	var body := _base("Diplomacy & foreign affairs", "Manage bilateral relations, trade agreements, alliances, sanctions and war.")
+	var summary := HBoxContainer.new()
+	summary.add_theme_constant_override("separation", 10)
+	body.add_child(summary)
+	var trade_count := 0
+	var alliance_count := 0
+	var war_count := 0
+	for relation_value in GameState.diplomacy_relations.values():
+		var relation: Dictionary = relation_value
+		if bool(relation.get("trade_agreement", false)):
+			trade_count += 1
+		if bool(relation.get("alliance", false)):
+			alliance_count += 1
+		if bool(relation.get("at_war", false)):
+			war_count += 1
+	summary.add_child(_stat_card("TRADE PARTNERS", str(trade_count), "ACTIVE AGREEMENTS"))
+	summary.add_child(_stat_card("ALLIANCES", str(alliance_count), "DEFENSE PARTNERS"))
+	summary.add_child(_stat_card("ACTIVE WARS", str(war_count), "MILITARY CONFLICTS"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 6)
+	scroll.add_child(rows)
+	var nations := GameState.ai_countries.duplicate(true)
+	nations.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ra: Dictionary = GameState.get_diplomacy(str(a.get("id", "")))
+		var rb: Dictionary = GameState.get_diplomacy(str(b.get("id", "")))
+		return float(ra.get("relation", 0.0)) > float(rb.get("relation", 0.0))
+	)
+	for nation in nations:
+		var nation_id := str(nation.get("id", ""))
+		var relation: Dictionary = GameState.get_diplomacy(nation_id)
+		var status := _diplomacy_status(relation)
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 10)
+		rows.add_child(line)
+		var identity := Label.new()
+		identity.text = "%s  %s  (%s)" % [nation.get("flag", "🏳"), nation.get("name", "Unknown"), nation_id]
+		identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		identity.add_theme_color_override("font_color", TEXT)
+		line.add_child(identity)
+		var score := Label.new()
+		score.text = "%s  •  %+.0f" % [status, float(relation.get("relation", 0.0))]
+		score.custom_minimum_size.x = 150
+		score.add_theme_color_override("font_color", GOLD if status == "ALLIED" else (GREEN if status == "FRIENDLY" else MUTED))
+		line.add_child(score)
+		var open := _button("MANAGE", BLUE, func(id: String = nation_id): _open_diplomacy_detail(id))
+		open.custom_minimum_size.x = 110
+		line.add_child(open)
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+func _open_diplomacy_detail(country_id: String) -> void:
+	selected_diplomacy_id = country_id
+	_show_diplomacy_detail()
+
+func _diplomacy_status(relation: Dictionary) -> String:
+	if bool(relation.get("at_war", false)):
+		return "AT WAR"
+	if bool(relation.get("alliance", false)):
+		return "ALLIED"
+	if bool(relation.get("sanctions", false)):
+		return "SANCTIONED"
+	var score := float(relation.get("relation", 0.0))
+	if score >= 50.0:
+		return "FRIENDLY"
+	if score <= -35.0:
+		return "HOSTILE"
+	return "NEUTRAL"
+
+func _show_diplomacy_detail() -> void:
+	current_screen = "diplomacy_detail"
+	var nation := GameState.get_ai_country(selected_diplomacy_id)
+	var relation := GameState.get_diplomacy(selected_diplomacy_id)
+	if nation.is_empty() or relation.is_empty():
+		_show_diplomacy()
+		return
+	var body := _base("%s  %s" % [nation.get("flag", "🏳"), nation.get("name", "Nation")], "BILATERAL RELATIONS  /  FOREIGN AFFAIRS")
+	body.add_child(_stat_card("RELATIONSHIP", "%+.0f / 100" % float(relation.get("relation", 0.0)), _diplomacy_status(relation)))
+	body.add_child(_muted_label("Capital: %s  •  GDP: %s  •  Population: %s" % [nation.get("capital", "Not listed"), _money(float(nation.get("gdp", 0.0))), _format_number(int(nation.get("population", 0)))]))
+	body.add_child(_muted_label("Trade agreement: %s  •  Alliance: %s" % ["ACTIVE" if relation.get("trade_agreement", false) else "NONE", "ACTIVE" if relation.get("alliance", false) else "NONE"]))
+	body.add_child(_muted_label("Sanctions: %s  •  War: %s" % ["ACTIVE" if relation.get("sanctions", false) else "NONE", "ACTIVE" if relation.get("at_war", false) else "NONE"]))
+	body.add_child(_section_label("DIPLOMATIC ACTIONS"))
+	body.add_child(_button("Improve relations  •  cost %s" % _money(maxf(GameState.gdp * 0.00015, 100000.0)), GREEN, func():
+		if GameState.improve_relations(selected_diplomacy_id):
+			_show_diplomacy_detail()
+		else:
+			_show_toast("Action unavailable: check treasury or war status.")
+	))
+	body.add_child(_button("Establish trade agreement", BLUE, func():
+		if GameState.establish_trade_agreement(selected_diplomacy_id):
+			_show_diplomacy_detail()
+		else:
+			_show_toast("Trade requires relation above -20 and no war or sanctions.")
+	))
+	body.add_child(_button("Form alliance", GOLD, func():
+		if GameState.establish_alliance(selected_diplomacy_id):
+			_show_diplomacy_detail()
+		else:
+			_show_toast("Alliance requires a trade pact and relation of at least +50.")
+	))
+	body.add_child(_button("Impose economic sanctions", PANEL_ALT, func():
+		if GameState.impose_sanctions(selected_diplomacy_id):
+			_show_diplomacy_detail()
+		else:
+			_show_toast("Sanctions cannot be imposed during war.")
+	))
+	body.add_child(_button("Declare war", Color("#873d49"), func():
+		if GameState.declare_war(selected_diplomacy_id):
+			_show_diplomacy_detail()
+		else:
+			_show_toast("War action unavailable.")
+	))
+	if bool(relation.get("at_war", false)):
+		body.add_child(_button("Negotiate peace", GREEN, func():
+			GameState.make_peace(selected_diplomacy_id)
+			_show_diplomacy_detail()
+		))
+	body.add_child(_button("BACK TO DIPLOMACY", PANEL_ALT, _show_diplomacy))
 
 func _show_budget() -> void:
 	current_screen = "budget"
