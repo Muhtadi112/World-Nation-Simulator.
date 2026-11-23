@@ -34,6 +34,8 @@ func _initialize_cities(country: Dictionary) -> void:
 	if city_catalog.is_empty():
 		load_city_catalog()
 	cities.clear()
+	regional_funds.clear()
+	selected_region_name = ""
 	var country_id := str(country.get("id", ""))
 	var matching: Array[Dictionary] = []
 	var total_catalog_population := 0.0

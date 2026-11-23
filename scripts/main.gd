@@ -741,9 +741,9 @@ func _show_cities() -> void:
 		management_box.add_child(allocation_row)
 		var allocation := SpinBox.new()
 		allocation.min_value = 1000000
-		allocation.max_value = maxf(treasury, 1000000.0)
+		allocation.max_value = maxf(GameState.treasury, 1000000.0)
 		allocation.step = 1000000
-		allocation.value = minf(10000000.0, maxf(treasury, 1000000.0))
+		allocation.value = minf(10000000.0, maxf(GameState.treasury, 1000000.0))
 		allocation.prefix = "$"
 		allocation.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		allocation_row.add_child(allocation)
