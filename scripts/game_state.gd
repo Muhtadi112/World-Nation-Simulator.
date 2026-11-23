@@ -13,6 +13,10 @@ var transport_routes: Array[Dictionary] = []
 var selected_city_id: String = ""
 var regional_funds: Dictionary = {}
 var selected_region_name: String = ""
+var companies: Array[Dictionary] = []
+var corporate_tax_rate: float = 0.18
+var monthly_corporate_tax: float = 0.0
+var private_sector_jobs: int = 0
 var infrastructure: Dictionary = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 var city_catalog: Array[Dictionary] = []
 
@@ -244,6 +248,114 @@ func upgrade_city(city_id: String, category: String) -> bool:
 			state_changed.emit()
 			return true
 	return false
+
+func _initialize_companies() -> void:
+	companies.clear()
+	private_sector_jobs = 0
+	for city in cities:
+		var city_id := str(city.get("id", ""))
+		var city_gdp := maxf(float(city.get("gdp", 100000000.0)), 100000000.0)
+		var city_name := str(city.get("name", "City"))
+		var base_jobs := maxi(20, int(float(city.get("population", 10000)) * 0.012))
+		var sectors := ["Manufacturing", "Retail & services"]
+		for sector_index in range(sectors.size()):
+			var jobs := maxi(10, int(float(base_jobs) * (0.42 if sector_index == 0 else 0.58)))
+			var monthly_revenue_value := city_gdp / 12.0 * (0.012 if sector_index == 0 else 0.016)
+			var wage := maxf(250.0, city_gdp / maxf(float(city.get("population", 1)), 1.0) * 0.018)
+			companies.append({
+				"id": city_id + "_CORP_" + str(sector_index + 1),
+				"name": city_name + (" Industrial Works" if sector_index == 0 else " Commerce Group"),
+				"city_id": city_id, "sector": sectors[sector_index],
+				"employees": jobs, "average_wage": wage,
+				"revenue": monthly_revenue_value,
+				"expenses": monthly_revenue_value * 0.78,
+				"profit": monthly_revenue_value * 0.22,
+				"cash_reserves": monthly_revenue_value * 2.0,
+				"tax_paid": monthly_revenue_value * 0.22 * corporate_tax_rate,
+				"operating_months": 0, "status": "Operating"
+			})
+			private_sector_jobs += jobs
+	monthly_corporate_tax = 0.0
+
+func create_company(city_id: String, sector: String) -> bool:
+	var target_city := get_city(city_id)
+	if target_city.is_empty() or companies.size() >= 5000:
+		return false
+	var allowed_sectors := ["Manufacturing", "Retail & services", "Technology", "Construction", "Logistics", "Energy"]
+	if not allowed_sectors.has(sector):
+		return false
+	var cost := maxf(float(target_city.get("gdp", 0.0)) * 0.0015, 15000000.0)
+	if treasury < cost:
+		return false
+	treasury -= cost
+	var city_name := str(target_city.get("name", "City"))
+	var employees := maxi(12, int(float(target_city.get("population", 10000)) * 0.0008))
+	var revenue := maxf(float(target_city.get("gdp", 0.0)) / 12.0 * 0.004, 250000.0)
+	var company_name := city_name + " " + sector + " " + str(companies.size() + 1)
+	companies.append({
+		"id": city_id + "_NEW_" + str(Time.get_ticks_msec()),
+		"name": company_name, "city_id": city_id, "sector": sector,
+		"employees": employees, "average_wage": maxf(250.0, float(target_city.get("gdp", 0.0)) / maxf(float(target_city.get("population", 1)), 1.0) * 0.016),
+		"revenue": revenue, "expenses": revenue * 0.86,
+		"profit": revenue * 0.14, "cash_reserves": cost * 0.35,
+		"tax_paid": revenue * 0.14 * corporate_tax_rate,
+		"operating_months": 0, "status": "Operating"
+	})
+	private_sector_jobs += employees
+	state_changed.emit()
+	return true
+
+func set_corporate_tax(new_rate: float) -> void:
+	corporate_tax_rate = clampf(new_rate, 0.05, 0.35)
+	state_changed.emit()
+
+func _run_monthly_company_simulation() -> void:
+	monthly_corporate_tax = 0.0
+	private_sector_jobs = 0
+	var city_lookup: Dictionary = {}
+	for city in cities:
+		city_lookup[str(city.get("id", ""))] = city
+	for index in range(companies.size()):
+		var company: Dictionary = companies[index]
+		if str(company.get("status", "Operating")) == "Bankrupt":
+			continue
+		var city: Dictionary = city_lookup.get(str(company.get("city_id", "")), {})
+		if city.is_empty():
+			continue
+		var revenue := maxf(0.0, float(company.get("revenue", 0.0)) * (1.0 + annual_gdp_growth / 1200.0 + (float(city.get("quality_of_life", 50.0)) - 50.0) * 0.00015))
+		var employees := maxi(0, int(company.get("employees", 0)))
+		var wage := maxf(0.0, float(company.get("average_wage", 0.0)))
+		var payroll := float(employees) * wage
+		var operating_cost := revenue * 0.48 + payroll
+		var profit := revenue - operating_cost
+		var reserves := float(company.get("cash_reserves", 0.0)) + profit
+		var status := "Operating"
+		if profit < 0.0:
+			reserves += profit
+			if reserves < -revenue * 1.5:
+				status = "Bankrupt"
+				employees = 0
+		else:
+			var hiring_capacity := int(maxf(0.0, profit / maxf(wage * 12.0, 1.0)) * 0.02)
+			employees += mini(hiring_capacity, maxi(1, int(float(employees) * 0.015)))
+		var tax := maxf(0.0, profit) * corporate_tax_rate
+		monthly_corporate_tax += tax
+		company["revenue"] = revenue
+		company["expenses"] = operating_cost
+		company["profit"] = profit
+		company["cash_reserves"] = maxf(0.0, reserves)
+		company["tax_paid"] = tax
+		company["employees"] = employees
+		company["operating_months"] = int(company.get("operating_months", 0)) + 1
+		company["status"] = status
+		companies[index] = company
+		private_sector_jobs += employees
+	var total_profit := 0.0
+	for company in companies:
+		if str(company.get("status", "")) == "Operating":
+			total_profit += maxf(0.0, float(company.get("profit", 0.0)))
+	treasury += monthly_corporate_tax
+	gdp += total_profit * 0.08
 
 func _run_monthly_city_simulation() -> void:
 	if cities.is_empty():
@@ -613,6 +725,7 @@ func _advance_day() -> void:
 		_run_monthly_industry()
 		_run_monthly_infrastructure()
 		_run_monthly_transport_simulation()
+		_run_monthly_company_simulation()
 		_run_monthly_city_simulation()
 		_update_market_prices()
 		_run_ai_world_simulation()
@@ -1028,6 +1141,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	last_trade_report = "No trade transactions yet."
 	infrastructure = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 	_initialize_cities(country)
+	_initialize_companies()
 	transport_routes.clear()
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
 	tanks = maxi(100, int(gdp / 1800000000.0))
@@ -1062,7 +1176,7 @@ func save_game() -> bool:
 		"trade_imports": trade_imports, "trade_balance": trade_balance,
 		"trade_tariff_rate": trade_tariff_rate, "last_trade_report": last_trade_report,
 		"infrastructure": infrastructure, "cities": cities, "selected_city_id": selected_city_id,
-		"transport_routes": transport_routes,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
+		"transport_routes": transport_routes, "companies": companies, "corporate_tax_rate": corporate_tax_rate, "monthly_corporate_tax": monthly_corporate_tax, "private_sector_jobs": private_sector_jobs,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -1135,6 +1249,15 @@ func load_game() -> bool:
 	for route_data in data.get("transport_routes", []):
 		if typeof(route_data) == TYPE_DICTIONARY:
 			transport_routes.append(route_data)
+	companies.clear()
+	for company_data in data.get("companies", []):
+		if typeof(company_data) == TYPE_DICTIONARY:
+			companies.append(company_data)
+	corporate_tax_rate = float(data.get("corporate_tax_rate", 0.18))
+	monthly_corporate_tax = float(data.get("monthly_corporate_tax", 0.0))
+	private_sector_jobs = int(data.get("private_sector_jobs", 0))
+	if companies.is_empty() and not cities.is_empty():
+		_initialize_companies()
 	regional_funds = data.get("regional_funds", {})
 	selected_region_name = str(data.get("selected_region_name", ""))
 	if cities.is_empty() and not selected_country.is_empty():

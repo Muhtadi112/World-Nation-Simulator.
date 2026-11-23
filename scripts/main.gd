@@ -40,6 +40,7 @@ func _on_viewport_resized() -> void:
 			"infrastructure": _show_infrastructure()
 			"cities": _show_cities(),
 			"transport": _show_transport()
+			"companies": _show_companies()
 
 func _clear() -> void:
 	for child in get_children():
@@ -300,6 +301,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("City & regional management", PANEL_ALT, _show_cities))
 	side.add_child(_button("Transport network", PANEL_ALT, _show_transport))
 	side.add_child(_button("Industry & trade", PANEL_ALT, _show_industry))
+	side.add_child(_button("Companies & employment", PANEL_ALT, _show_companies))
 	side.add_child(_button("International trade", PANEL_ALT, _show_trade))
 	side.add_child(_action_button("Research", "Technology tree coming in Phase 2"))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
@@ -815,6 +817,99 @@ func _show_transport() -> void:
 		))
 	body.add_child(_muted_label("Transport is a strategic prototype: route distance uses city coordinates; traffic and capacity are simplified estimates, not turn-by-turn pathfinding or real road geometry. Rail, air and sea routes require matching terminals at both cities."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+func _show_companies() -> void:
+	current_screen = "companies"
+	var body := _base("Companies & employment", "PRIVATE SECTOR  /  CORPORATE TAX  /  LABOUR MARKET")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	var active_count := 0
+	var bankrupt_count := 0
+	var total_revenue := 0.0
+	var total_profit := 0.0
+	for company in GameState.companies:
+		if str(company.get("status", "")) == "Bankrupt":
+			bankrupt_count += 1
+		else:
+			active_count += 1
+			total_revenue += float(company.get("revenue", 0.0))
+			total_profit += float(company.get("profit", 0.0))
+	summary.add_child(_stat_card("ACTIVE COMPANIES", str(active_count), "%d BANKRUPT" % bankrupt_count))
+	summary.add_child(_stat_card("PRIVATE JOBS", _format_number(GameState.private_sector_jobs), "ESTIMATED EMPLOYEES"))
+	summary.add_child(_stat_card("MONTHLY REVENUE", _money(total_revenue), "COMPANY TURNOVER"))
+	summary.add_child(_stat_card("MONTHLY PROFIT", _money(total_profit), "BEFORE CORPORATE TAX"))
+	summary.add_child(_stat_card("CORPORATE TAX", _money(GameState.monthly_corporate_tax), "MONTHLY GOVERNMENT RECEIPTS"))
+	body.add_child(_section_label("CORPORATE TAX POLICY"))
+	var tax_slider := HSlider.new()
+	tax_slider.min_value = 5
+	tax_slider.max_value = 35
+	tax_slider.step = 1
+	tax_slider.value = GameState.corporate_tax_rate * 100.0
+	tax_slider.custom_minimum_size.x = 260
+	body.add_child(tax_slider)
+	var tax_label := _muted_label("Corporate tax rate: %.0f%%" % (GameState.corporate_tax_rate * 100.0))
+	body.add_child(tax_label)
+	tax_slider.value_changed.connect(func(value: float): tax_label.text = "Corporate tax rate: %.0f%%" % value)
+	body.add_child(_button("APPLY CORPORATE TAX", BLUE, func():
+		GameState.set_corporate_tax(tax_slider.value / 100.0)
+		_show_companies()
+	))
+	body.add_child(_section_label("ESTABLISH A NEW COMPANY"))
+	var city_picker := OptionButton.new()
+	for city in GameState.cities:
+		city_picker.add_item(str(city.get("name", "City")))
+		city_picker.set_item_metadata(city_picker.item_count - 1, str(city.get("id", "")))
+	body.add_child(city_picker)
+	var sector_picker := OptionButton.new()
+	for sector in ["Manufacturing", "Retail & services", "Technology", "Construction", "Logistics", "Energy"]:
+		sector_picker.add_item(sector)
+	body.add_child(sector_picker)
+	var selected_city_id := str(city_picker.get_item_metadata(0)) if city_picker.item_count > 0 else ""
+	var cost_label := _muted_label("Investment cost: select a city to establish a company.")
+	body.add_child(cost_label)
+	city_picker.item_selected.connect(func(index: int):
+		selected_city_id = str(city_picker.get_item_metadata(index))
+		var city_data := GameState.get_city(selected_city_id)
+		cost_label.text = "Investment cost: " + _money(maxf(float(city_data.get("gdp", 0.0)) * 0.0015, 15000000.0))
+	)
+	if city_picker.item_count > 0:
+		var initial_city := GameState.get_city(selected_city_id)
+		cost_label.text = "Investment cost: " + _money(maxf(float(initial_city.get("gdp", 0.0)) * 0.0015, 15000000.0))
+	body.add_child(_button("FOUND COMPANY", GREEN, func():
+		if GameState.create_company(selected_city_id, sector_picker.get_item_text(sector_picker.selected)):
+			_show_companies()
+		else:
+			_show_toast("Company founding failed: check treasury, city selection or company cap.")
+	))
+	body.add_child(_section_label("COMPANY REGISTER  /  %d ENTRIES" % GameState.companies.size()))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 5)
+	scroll.add_child(rows)
+	var sorted_companies := GameState.companies.duplicate(true)
+	sorted_companies.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.get("profit", 0.0)) > float(b.get("profit", 0.0)))
+	for company in sorted_companies:
+		var city_name := "Unknown city"
+		for city in GameState.cities:
+			if str(city.get("id", "")) == str(company.get("city_id", "")):
+				city_name = str(city.get("name", city_name))
+				break
+		var row := PanelContainer.new()
+		row.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 8))
+		rows.add_child(row)
+		var column := VBoxContainer.new()
+		column.add_theme_constant_override("separation", 3)
+		row.add_child(column)
+		column.add_child(_muted_label("%s  •  %s  •  %s" % [str(company.get("name", "Company")), str(company.get("sector", "Sector")), city_name]))
+		column.add_child(_muted_label("%s employees  •  Wage %s  •  Revenue %s  •  Profit %s  •  %s" % [_format_number(int(company.get("employees", 0))), _money(float(company.get("average_wage", 0.0))), _money(float(company.get("revenue", 0.0))), _money(float(company.get("profit", 0.0))), str(company.get("status", "Operating"))]))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
 
 func _show_cities() -> void:
 	current_screen = "cities"
