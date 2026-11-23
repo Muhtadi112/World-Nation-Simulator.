@@ -1,0 +1,23 @@
+name: Godot Project Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Godot version
+        run: godot --version
+      - name: Import project
+        run: godot --headless --editor --path . --quit
+      - name: Run project smoke test
+        run: godot --headless --path . --quit-after 3
