@@ -1,16 +1,26 @@
 extends Control
 class_name WorldMapView
 
-var selected_label: String = "Indonesia"
+# Interactive prototype map. Coastlines remain illustrative until real boundary data is integrated.
+var zoom: float = 1.0
+var pan: Vector2 = Vector2.ZERO
+var _dragging := false
+var _last_pointer := Vector2.ZERO
+
+const ZOOM_MIN := 0.65
+const ZOOM_MAX := 2.8
+const MAP_CENTER := Vector2(400.0, 205.0)
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	queue_redraw()
 
 func _draw() -> void:
-	var rect := Rect2(Vector2.ZERO, size)
-	draw_rect(rect, Color("#0d1b2a"))
-	# Stylized illustrative land masses. A geographic dataset will replace these in a later milestone.
+	draw_rect(Rect2(Vector2.ZERO, size), Color("#0d1b2a"))
+	var fitted := minf(size.x / 800.0, size.y / 410.0)
+	var map_scale := fitted * zoom
+	var origin := (size - MAP_CENTER * map_scale * 2.0) * 0.5 + pan
+	draw_set_transform(origin, 0.0, Vector2.ONE * map_scale)
 	var land := Color("#1c3d4b")
 	var edge := Color("#2d6470")
 	var shapes: Array[PackedVector2Array] = [
@@ -26,15 +36,48 @@ func _draw() -> void:
 	for polygon in shapes:
 		draw_colored_polygon(polygon, land)
 		draw_polyline(polygon, edge, 2.0, true)
-	# Map grid
-	for x in range(0, int(size.x), 80):
-		draw_line(Vector2(x, 0), Vector2(x, size.y), Color(0.25, 0.55, 0.65, 0.08), 1.0)
-	for y in range(0, int(size.y), 65):
-		draw_line(Vector2(0, y), Vector2(size.x, y), Color(0.25, 0.55, 0.65, 0.08), 1.0)
-	draw_circle(Vector2(size.x * 0.54, size.y * 0.53), 6.0, Color("#29d6bd"))
-	draw_circle(Vector2(size.x * 0.54, size.y * 0.53), 13.0, Color(0.16, 0.84, 0.74, 0.15))
-	draw_string(ThemeDB.fallback_font, Vector2(20, size.y - 20), "ILLUSTRATIVE WORLD MAP  •  GEOGRAPHIC DATA INTEGRATION: NEXT MILESTONE", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#7895a8"))
+	for x in range(0, 801, 80):
+		draw_line(Vector2(x, 0), Vector2(x, 410), Color(0.25, 0.55, 0.65, 0.08), 1.0)
+	for y in range(0, 411, 65):
+		draw_line(Vector2(0, y), Vector2(800, y), Color(0.25, 0.55, 0.65, 0.08), 1.0)
+	draw_circle(Vector2(610, 250), 6.0, Color("#29d6bd"))
+	draw_circle(Vector2(610, 250), 13.0, Color(0.16, 0.84, 0.74, 0.15))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	draw_string(ThemeDB.fallback_font, Vector2(14, size.y - 14), "ILLUSTRATIVE MAP  •  DRAG TO MOVE  •  SCROLL TO ZOOM", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#7895a8"))
+	draw_string(ThemeDB.fallback_font, Vector2(size.x - 82, 24), "%d%%" % int(zoom * 100.0), HORIZONTAL_ALIGNMENT_RIGHT, 68, 11, Color("#29d6e8"))
 
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			_dragging = event.pressed
+			_last_pointer = event.position
+			accept_event()
+		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_zoom_at(event.position, 1.12)
+			accept_event()
+		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_zoom_at(event.position, 1.0 / 1.12)
+			accept_event()
+	elif event is InputEventMouseMotion and _dragging:
+		pan += event.position - _last_pointer
+		_last_pointer = event.position
+		queue_redraw()
 		accept_event()
+	elif event is InputEventScreenTouch:
+		_dragging = event.pressed
+		_last_pointer = event.position
+		accept_event()
+	elif event is InputEventScreenDrag and _dragging:
+		pan += event.position - _last_pointer
+		_last_pointer = event.position
+		queue_redraw()
+		accept_event()
+
+func _zoom_at(pointer: Vector2, factor: float) -> void:
+	var next_zoom := clampf(zoom * factor, ZOOM_MIN, ZOOM_MAX)
+	if is_equal_approx(next_zoom, zoom):
+		return
+	var ratio := next_zoom / zoom
+	pan = pointer - (pointer - pan) * ratio
+	zoom = next_zoom
+	queue_redraw()

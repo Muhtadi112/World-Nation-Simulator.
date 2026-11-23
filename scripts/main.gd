@@ -129,9 +129,14 @@ func _show_country_select() -> void:
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 14))
 	split.add_child(left)
+	var list_scroll := ScrollContainer.new()
+	list_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	list_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	left.add_child(list_scroll)
 	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 7)
-	left.add_child(list)
+	list_scroll.add_child(list)
 	var list_title := Label.new()
 	list_title.text = "AVAILABLE NATIONS"
 	list_title.add_theme_color_override("font_color", CYAN)
