@@ -133,13 +133,16 @@ func _process(delta: float) -> void:
 
 func _advance_day() -> void:
 	game_date["day"] += 1
+	var month_changed := false
 	if int(game_date["day"]) > 30:
 		game_date["day"] = 1
 		game_date["month"] += 1
+		month_changed = true
 		if int(game_date["month"]) > 12:
 			game_date["month"] = 1
 			game_date["year"] += 1
-	_run_monthly_economy()
+	if month_changed:
+		_run_monthly_economy()
 	state_changed.emit()
 
 func _run_monthly_economy() -> void:
