@@ -17,6 +17,7 @@ var country_list: VBoxContainer
 var selected_country: Dictionary = {}
 var current_screen: String = "home"
 var country_search_text: String = ""
+var country_results: VBoxContainer
 
 func _ready() -> void:
 	get_viewport().size_changed.connect(_on_viewport_resized)
@@ -149,18 +150,12 @@ func _show_country_select() -> void:
 	search.clear_button_enabled = true
 	search.text_changed.connect(_on_country_search_changed)
 	list.add_child(search)
-	var matches := 0
-	for country in GameState.country_catalog:
-		var query := country_search_text.strip_edges().to_lower()
-		var haystack := ("%s %s %s" % [country.name, country.id, country.region]).to_lower()
-		if not query.is_empty() and not haystack.contains(query):
-			continue
-		var item := _button("%s   %s   •   %s" % [country.flag, country.name, country.region], PANEL_ALT, func(c: Dictionary = country): _select_country(c))
-		item.custom_minimum_size.y = 42
-		list.add_child(item)
-		matches += 1
-	if matches == 0:
-		list.add_child(_muted_label("No matching country found."))
+	country_results = VBoxContainer.new()
+	country_results.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	country_results.add_theme_constant_override("separation", 7)
+	list.add_child(country_results)
+	_populate_country_results()
+
 	var right := PanelContainer.new()
 	right.custom_minimum_size.x = 340
 	right.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 14))
@@ -193,7 +188,25 @@ func _show_country_select() -> void:
 
 func _on_country_search_changed(value: String) -> void:
 	country_search_text = value
-	_show_country_select()
+	_populate_country_results()
+
+func _populate_country_results() -> void:
+	if country_results == null or not is_instance_valid(country_results):
+		return
+	for child in country_results.get_children():
+		child.queue_free()
+	var query := country_search_text.strip_edges().to_lower()
+	var matches := 0
+	for country in GameState.country_catalog:
+		var haystack := ("%s %s %s" % [country.name, country.id, country.region]).to_lower()
+		if not query.is_empty() and not haystack.contains(query):
+			continue
+		var item := _button("%s   %s   •   %s" % [country.flag, country.name, country.region], PANEL_ALT, func(c: Dictionary = country): _select_country(c))
+		item.custom_minimum_size.y = 42
+		country_results.add_child(item)
+		matches += 1
+	if matches == 0:
+		country_results.add_child(_muted_label("No matching country found."))
 
 func _select_country(country: Dictionary) -> void:
 	selected_country = country.duplicate(true)
