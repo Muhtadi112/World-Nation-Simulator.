@@ -71,7 +71,9 @@ func _initialize_cities(country: Dictionary) -> void:
 			"quality_of_life": 58.0 + float(entry.get("tier", 3)) * 2.0,
 			"lat": float(entry.get("lat", 0.0)),
 			"lon": float(entry.get("lon", 0.0)),
-			"roads": 2, "power": 2, "housing": 2, "health": 1, "education": 1
+			"roads": 2, "power": 2, "housing": 2, "health": 1, "education": 1,
+			"zones": {"residential": 2, "industrial": 1, "commercial": 1, "government": 1},
+			"buildings": [], "land_value": maxf(100.0, city_gdp / maxf(float(city_population), 1.0) * 0.12)
 		})
 	if not cities.is_empty():
 		selected_city_id = str(cities[0].get("id", ""))
@@ -144,6 +146,22 @@ func upgrade_city(city_id: String, category: String) -> bool:
 func _run_monthly_city_simulation() -> void:
 	for index in range(cities.size()):
 		var city: Dictionary = cities[index]
+		if not city.has("zones"):
+			city["zones"] = {"residential": 2, "industrial": 1, "commercial": 1, "government": 1}
+		if not city.has("buildings"):
+			city["buildings"] = []
+		var buildings: Array = city.get("buildings", [])
+		var building_output := 0.0
+		var building_jobs := 0
+		for building in buildings:
+			if typeof(building) == TYPE_DICTIONARY:
+				building_output += float(building.get("monthly_output", 0.0))
+				building_jobs += int(building.get("jobs", 0))
+		city["building_jobs"] = building_jobs
+		city["building_output"] = building_output
+		var zones: Dictionary = city.get("zones", {})
+		var zone_bonus := (float(zones.get("residential", 1)) + float(zones.get("industrial", 1)) + float(zones.get("commercial", 1))) * 0.00008
+		city["land_value"] = maxf(10.0, float(city.get("land_value", 100.0)) * (1.0 + 0.001 + float(city.get("development_index", 25.0)) * 0.00001))
 		var roads := float(city.get("roads", 1))
 		var education := float(city.get("education", 1))
 		var health := float(city.get("health", 1))
@@ -151,11 +169,97 @@ func _run_monthly_city_simulation() -> void:
 		var infrastructure_score := (roads + education + health + housing + float(city.get("power", 1))) / 150.0
 		var growth := clampf(0.00045 + infrastructure_score * 0.00035, 0.0002, 0.0012)
 		city["population"] = maxi(10000, int(float(city.get("population", 10000)) * (1.0 + growth)))
-		city["gdp"] = float(city.get("gdp", 0.0)) * (1.0 + annual_gdp_growth / 1200.0 + infrastructure_score * 0.001)
-		city["employment"] = clampf(float(city.get("employment", 94.0)) + 0.015 + education * 0.001, 70.0, 99.5)
+		city["gdp"] = float(city.get("gdp", 0.0)) * (1.0 + annual_gdp_growth / 1200.0 + infrastructure_score * 0.001 + zone_bonus) + building_output * 0.12
+		city["employment"] = clampf(float(city.get("employment", 94.0)) + 0.015 + education * 0.001 + float(building_jobs) / maxf(float(city.get("population", 1)), 1.0) * 0.02, 70.0, 99.5)
 		city["development_index"] = minf(100.0, float(city.get("development_index", 25.0)) + infrastructure_score * 0.035)
 		city["quality_of_life"] = clampf(float(city.get("quality_of_life", 58.0)) + (health + housing) * 0.004 - maxf(inflation - 4.0, 0.0) * 0.01, 10.0, 100.0)
 		cities[index] = city
+
+
+func city_zone_cost(city_id: String, zone_type: String) -> float:
+	var allowed := ["residential", "industrial", "commercial", "government"]
+	if not allowed.has(zone_type):
+		return -1.0
+	var city := get_city(city_id)
+	if city.is_empty():
+		return -1.0
+	var zones: Dictionary = city.get("zones", {})
+	var level := int(zones.get(zone_type, 1))
+	return maxf(float(city.get("gdp", 0.0)) * 0.00012 * float(level + 1), 8000000.0)
+
+func develop_city_zone(city_id: String, zone_type: String) -> bool:
+	var cost := city_zone_cost(city_id, zone_type)
+	if cost < 0.0 or treasury < cost:
+		return false
+	for index in range(cities.size()):
+		var city: Dictionary = cities[index]
+		if str(city.get("id", "")) != city_id:
+			continue
+		var zones: Dictionary = city.get("zones", {"residential": 2, "industrial": 1, "commercial": 1, "government": 1})
+		var level := int(zones.get(zone_type, 1))
+		if level >= 20:
+			return false
+		zones[zone_type] = level + 1
+		city["zones"] = zones
+		city["development_index"] = minf(100.0, float(city.get("development_index", 25.0)) + 0.8)
+		city["land_value"] = float(city.get("land_value", 100.0)) * 1.025
+		cities[index] = city
+		treasury -= cost
+		state_changed.emit()
+		return true
+	return false
+
+func city_building_cost(city_id: String, building_type: String) -> float:
+	var multipliers := {"factory": 0.0018, "mall": 0.0012, "apartments": 0.0010, "hospital": 0.0015, "university": 0.0014, "power_plant": 0.0020}
+	if not multipliers.has(building_type):
+		return -1.0
+	var city := get_city(city_id)
+	if city.is_empty():
+		return -1.0
+	return maxf(float(city.get("gdp", 0.0)) * float(multipliers[building_type]), 12000000.0)
+
+func build_city_building(city_id: String, building_type: String) -> bool:
+	var cost := city_building_cost(city_id, building_type)
+	if cost < 0.0 or treasury < cost:
+		return false
+	var definitions := {
+		"factory": {"name": "Industrial Factory", "jobs": 850, "output": 0.10},
+		"mall": {"name": "Shopping Mall", "jobs": 420, "output": 0.075},
+		"apartments": {"name": "Residential Complex", "jobs": 90, "output": 0.025},
+		"hospital": {"name": "Public Hospital", "jobs": 260, "output": 0.035},
+		"university": {"name": "University Campus", "jobs": 310, "output": 0.045},
+		"power_plant": {"name": "Power Plant", "jobs": 180, "output": 0.06}
+	}
+	if not definitions.has(building_type):
+		return false
+	for index in range(cities.size()):
+		var city: Dictionary = cities[index]
+		if str(city.get("id", "")) != city_id:
+			continue
+		var buildings: Array = city.get("buildings", [])
+		if buildings.size() >= 50:
+			return false
+		var definition: Dictionary = definitions[building_type]
+		buildings.append({
+			"id": city_id + "_" + building_type.to_upper() + "_" + str(buildings.size() + 1),
+			"type": building_type, "name": definition["name"], "jobs": int(definition["jobs"]),
+			"monthly_output": cost * float(definition["output"]) / 12.0,
+			"construction_cost": cost
+		})
+		city["buildings"] = buildings
+		if building_type == "hospital":
+			city["quality_of_life"] = minf(100.0, float(city.get("quality_of_life", 58.0)) + 1.5)
+		elif building_type == "university":
+			city["development_index"] = minf(100.0, float(city.get("development_index", 25.0)) + 1.8)
+		elif building_type == "power_plant":
+			city["power"] = mini(30, int(city.get("power", 1)) + 1)
+		elif building_type == "apartments":
+			city["housing"] = mini(30, int(city.get("housing", 1)) + 1)
+		cities[index] = city
+		treasury -= cost
+		state_changed.emit()
+		return true
+	return false
 
 
 func get_region_detail(region_name: String) -> Dictionary:

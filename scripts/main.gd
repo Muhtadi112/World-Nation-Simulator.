@@ -815,6 +815,40 @@ func _show_cities() -> void:
 			)
 			project_button.custom_minimum_size.x = 170
 			projects.add_child(project_button)
+		detail.add_child(_section_label("CITY ZONING  /  LAND DEVELOPMENT"))
+		var zones: Dictionary = selected.get("zones", {"residential": 2, "industrial": 1, "commercial": 1, "government": 1})
+		detail.add_child(_muted_label("Land value index: %.1f  •  Zone levels: Residential %d  /  Industrial %d  /  Commercial %d  /  Government %d" % [float(selected.get("land_value", 100.0)), int(zones.get("residential", 1)), int(zones.get("industrial", 1)), int(zones.get("commercial", 1)), int(zones.get("government", 1))]))
+		var zone_buttons := HFlowContainer.new()
+		zone_buttons.add_theme_constant_override("h_separation", 6)
+		detail.add_child(zone_buttons)
+		for zone_type in ["residential", "industrial", "commercial", "government"]:
+			var zone_cost := GameState.city_zone_cost(str(selected.get("id", "")), zone_type)
+			zone_buttons.add_child(_button("ZONE " + zone_type.to_upper() + "  •  " + _money(zone_cost), PANEL_ALT, func(kind: String = zone_type):
+				if GameState.develop_city_zone(str(selected.get("id", "")), kind):
+					_show_cities()
+				else:
+					_show_toast("Zone upgrade failed: insufficient treasury or level cap.")
+			))
+		detail.add_child(_section_label("CONSTRUCT CITY BUILDINGS"))
+		var building_buttons := HFlowContainer.new()
+		building_buttons.add_theme_constant_override("h_separation", 6)
+		building_buttons.add_theme_constant_override("v_separation", 6)
+		detail.add_child(building_buttons)
+		for building_type in ["factory", "mall", "apartments", "hospital", "university", "power_plant"]:
+			var building_cost := GameState.city_building_cost(str(selected.get("id", "")), building_type)
+			building_buttons.add_child(_button(building_type.to_upper().replace("_", " ") + "  •  " + _money(building_cost), BLUE, func(kind: String = building_type):
+				if GameState.build_city_building(str(selected.get("id", "")), kind):
+					_show_cities()
+				else:
+					_show_toast("Construction failed: insufficient treasury or building limit reached.")
+			))
+		var buildings: Array = selected.get("buildings", [])
+		detail.add_child(_section_label("CITY BUILDING REGISTER  /  %d STRUCTURES" % buildings.size()))
+		if buildings.is_empty():
+			detail.add_child(_muted_label("No constructed buildings yet."))
+		else:
+			for building in buildings:
+				detail.add_child(_muted_label("• %s  —  %s jobs  /  %s monthly output" % [str(building.get("name", "Building")), _format_number(int(building.get("jobs", 0))), _money(float(building.get("monthly_output", 0.0)))]))
 	search.text_changed.connect(func(query: String):
 		for child in rows.get_children():
 			child.queue_free()
