@@ -11,6 +11,13 @@ var selected_country: Dictionary = {}
 var country_catalog: Array[Dictionary] = []
 var ai_countries: Array[Dictionary] = []
 var diplomacy_relations: Dictionary = {}
+var military_personnel: int = 350000
+var tanks: int = 1200
+var aircraft: int = 420
+var naval_vessels: int = 180
+var military_readiness: float = 68.0
+var defense_budget_rate: float = 0.035
+var monthly_defense_cost: float = 0.0
 var game_date: Dictionary = {"year": 2026, "month": 1, "day": 1}
 var simulation_speed: int = 1
 var is_paused: bool = false
@@ -153,7 +160,8 @@ func _run_monthly_economy() -> void:
 	if gdp <= 0.0:
 		return
 	monthly_revenue = gdp * tax_rate / 12.0
-	monthly_expenses = gdp * spending_rate / 12.0
+	monthly_defense_cost = gdp * defense_budget_rate / 12.0
+	monthly_expenses = gdp * spending_rate / 12.0 + monthly_defense_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 	treasury += monthly_balance
 	if treasury < 0.0:
@@ -170,6 +178,7 @@ func _run_monthly_economy() -> void:
 	gdp *= 1.0 + monthly_growth + investment_effect + stability_effect - inflation_effect
 	var annual_population_growth := 0.008 + (stability - 50.0) * 0.00004 - maxf(0.0, unemployment - 8.0) * 0.0001
 	population = maxi(1, int(float(population) * (1.0 + annual_population_growth / 12.0)))
+	military_readiness = clampf(military_readiness + (defense_budget_rate - 0.04) * 5.0 - 0.5, 20.0, 100.0)
 	var demand_pressure := (spending_rate - tax_rate) * 0.08
 	inflation = clampf(inflation + demand_pressure, 0.0, 40.0)
 	unemployment = clampf(unemployment - (annual_gdp_growth - 2.0) * 0.015 + (inflation - 6.0) * 0.008, 1.0, 35.0)
@@ -241,6 +250,39 @@ func get_ai_country(country_id: String) -> Dictionary:
 		if str(nation.get("id", "")) == country_id:
 			return nation.duplicate(true)
 	return {}
+
+func recruit_personnel() -> bool:
+	var recruitment := 10000
+	var cost := maxf(gdp * 0.0008, 25000000.0)
+	if treasury < cost or military_personnel + recruitment > maxi(100000, int(population * 0.015)):
+		return false
+	treasury -= cost
+	military_personnel += recruitment
+	military_readiness = maxf(20.0, military_readiness - 2.0)
+	state_changed.emit()
+	return true
+
+func procure_equipment() -> bool:
+	var cost := maxf(gdp * 0.0012, 50000000.0)
+	if treasury < cost:
+		return false
+	treasury -= cost
+	tanks += 80
+	aircraft += 24
+	naval_vessels += 8
+	military_readiness = clampf(military_readiness + 3.0, 0.0, 100.0)
+	state_changed.emit()
+	return true
+
+func set_defense_budget(new_rate: float) -> void:
+	defense_budget_rate = clampf(new_rate, 0.02, 0.12)
+	_update_budget_forecast()
+	state_changed.emit()
+
+func military_strength() -> float:
+	var manpower_score := float(military_personnel) * 0.12
+	var equipment_score := float(tanks) * 180.0 + float(aircraft) * 420.0 + float(naval_vessels) * 650.0
+	return (manpower_score + equipment_score) * (military_readiness / 100.0)
 
 func _initialize_diplomacy() -> void:
 	diplomacy_relations.clear()
@@ -358,7 +400,7 @@ func _run_diplomacy_monthly_effects() -> void:
 
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * spending_rate / 12.0
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate) / 12.0
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -384,6 +426,13 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	annual_gdp_growth = 3.2
 	stability = 72.0
 	_initialize_ai_countries()
+	military_personnel = maxi(50000, int(float(population) * 0.0012))
+	tanks = maxi(100, int(gdp / 1800000000.0))
+	aircraft = maxi(40, int(gdp / 5500000000.0))
+	naval_vessels = maxi(12, int(gdp / 14000000000.0))
+	military_readiness = 68.0
+	defense_budget_rate = 0.035
+	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	_initialize_diplomacy()
 	state_changed.emit()
 
@@ -399,7 +448,10 @@ func save_game() -> bool:
 		"debt": debt, "tax_rate": tax_rate, "spending_rate": spending_rate,
 		"monthly_revenue": monthly_revenue, "monthly_expenses": monthly_expenses,
 		"monthly_balance": monthly_balance, "annual_gdp_growth": annual_gdp_growth,
-		"stability": stability, "ai_countries": ai_countries, "diplomacy_relations": diplomacy_relations
+		"stability": stability, "ai_countries": ai_countries, "diplomacy_relations": diplomacy_relations,
+		"military_personnel": military_personnel, "tanks": tanks, "aircraft": aircraft,
+		"naval_vessels": naval_vessels, "military_readiness": military_readiness,
+		"defense_budget_rate": defense_budget_rate
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -443,6 +495,13 @@ func load_game() -> bool:
 			ai_countries.append(nation)
 	if ai_countries.is_empty():
 		_initialize_ai_countries()
+	military_personnel = int(data.get("military_personnel", maxi(50000, int(float(population) * 0.0012))))
+	tanks = int(data.get("tanks", maxi(100, int(gdp / 1800000000.0))))
+	aircraft = int(data.get("aircraft", maxi(40, int(gdp / 5500000000.0))))
+	naval_vessels = int(data.get("naval_vessels", maxi(12, int(gdp / 14000000000.0))))
+	military_readiness = float(data.get("military_readiness", 68.0))
+	defense_budget_rate = float(data.get("defense_budget_rate", 0.035))
+	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	diplomacy_relations = data.get("diplomacy_relations", {})
 	if diplomacy_relations.is_empty():
 		_initialize_diplomacy()

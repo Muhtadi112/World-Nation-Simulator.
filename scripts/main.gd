@@ -34,6 +34,7 @@ func _on_viewport_resized() -> void:
 			"world": _show_world_nations()
 			"diplomacy": _show_diplomacy()
 			"diplomacy_detail": _show_diplomacy_detail()
+			"military": _show_military()
 
 func _clear() -> void:
 	for child in get_children():
@@ -288,6 +289,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("World nations / AI", PANEL_ALT, _show_world_nations))
 	side.add_child(_action_button("Cabinet & ministries", "Government simulation coming in Phase 2"))
 	side.add_child(_button("Diplomacy & foreign affairs", PANEL_ALT, _show_diplomacy))
+	side.add_child(_button("Military & defense", PANEL_ALT, _show_military))
 	side.add_child(_section_label("DEVELOPMENT"))
 	side.add_child(_action_button("Infrastructure", "City construction coming in Phase 2"))
 	side.add_child(_action_button("Industry & trade", "Business simulation coming in Phase 2"))
@@ -333,6 +335,62 @@ func _show_world_nations() -> void:
 		people.text = "Pop. %s   •   Stability %.0f" % [_format_number(int(nation.get("population", 0))), float(nation.get("stability", 0.0))]
 		people.add_theme_color_override("font_color", GREEN)
 		line.add_child(people)
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+func _show_military() -> void:
+	current_screen = "military"
+	var body := _base("Military & defense", "Armed forces, readiness, equipment procurement and defense funding.")
+	var stats := HBoxContainer.new()
+	stats.add_theme_constant_override("separation", 10)
+	body.add_child(stats)
+	stats.add_child(_stat_card("ACTIVE PERSONNEL", _format_number(GameState.military_personnel), "SERVICE MEMBERS"))
+	stats.add_child(_stat_card("MILITARY READINESS", "%.0f%%" % GameState.military_readiness, "OPERATIONAL READINESS"))
+	stats.add_child(_stat_card("MILITARY POWER", _format_number(int(GameState.military_strength())), "COMPOSITE INDEX"))
+	var equipment := PanelContainer.new()
+	equipment.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(equipment)
+	var equipment_column := VBoxContainer.new()
+	equipment_column.add_theme_constant_override("separation", 10)
+	equipment.add_child(equipment_column)
+	equipment_column.add_child(_section_label("FORCE STRUCTURE"))
+	equipment_column.add_child(_muted_label("Main battle tanks: %s" % _format_number(GameState.tanks)))
+	equipment_column.add_child(_muted_label("Military aircraft: %s" % _format_number(GameState.aircraft)))
+	equipment_column.add_child(_muted_label("Naval vessels: %s" % _format_number(GameState.naval_vessels)))
+	equipment_column.add_child(_muted_label("Monthly defense cost: %s" % _money(GameState.monthly_defense_cost)))
+	var policy := PanelContainer.new()
+	policy.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(policy)
+	var controls := VBoxContainer.new()
+	controls.add_theme_constant_override("separation", 8)
+	policy.add_child(controls)
+	controls.add_child(_section_label("DEFENSE BUDGET"))
+	var defense_label := _muted_label("Defense allocation: %.1f%% of GDP" % (GameState.defense_budget_rate * 100.0))
+	controls.add_child(defense_label)
+	var slider := HSlider.new()
+	slider.min_value = 2
+	slider.max_value = 12
+	slider.step = 0.5
+	slider.value = GameState.defense_budget_rate * 100.0
+	slider.value_changed.connect(func(value: float): defense_label.text = "Defense allocation: %.1f%% of GDP" % value)
+	controls.add_child(slider)
+	controls.add_child(_muted_label("Higher funding improves readiness over time but increases monthly government expenses."))
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 10)
+	body.add_child(actions)
+	actions.add_child(_button("APPLY DEFENSE BUDGET", BLUE, func(): GameState.set_defense_budget(slider.value / 100.0); _show_military()))
+	actions.add_child(_button("RECRUIT 10,000", GREEN, func():
+		if GameState.recruit_personnel():
+			_show_military()
+		else:
+			_show_toast("Recruitment unavailable: insufficient funds or personnel cap reached.")
+	))
+	actions.add_child(_button("PROCURE EQUIPMENT", GOLD, func():
+		if GameState.procure_equipment():
+			_show_military()
+		else:
+			_show_toast("Insufficient treasury for equipment procurement.")
+	))
+	body.add_child(_muted_label("Procurement adds 80 tanks, 24 aircraft and 8 naval vessels. Recruitment and procurement are charged immediately."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_diplomacy() -> void:
