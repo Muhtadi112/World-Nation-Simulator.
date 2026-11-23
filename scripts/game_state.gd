@@ -9,6 +9,7 @@ const COUNTRY_DATA_PATH := "res://data/countries_110m.json"
 
 const CITY_DATA_PATH := "res://data/major_cities.json"
 var cities: Array[Dictionary] = []
+var transport_routes: Array[Dictionary] = []
 var selected_city_id: String = ""
 var regional_funds: Dictionary = {}
 var selected_region_name: String = ""
@@ -112,6 +113,75 @@ func get_regions() -> Array[Dictionary]:
 	)
 	return result
 
+func _city_distance_km(city_a: Dictionary, city_b: Dictionary) -> float:
+	var lat_a := deg_to_rad(float(city_a.get("lat", 0.0)))
+	var lat_b := deg_to_rad(float(city_b.get("lat", 0.0)))
+	var delta_lat := lat_b - lat_a
+	var delta_lon := deg_to_rad(float(city_b.get("lon", 0.0)) - float(city_a.get("lon", 0.0)))
+	var haversine := pow(sin(delta_lat * 0.5), 2.0) + cos(lat_a) * cos(lat_b) * pow(sin(delta_lon * 0.5), 2.0)
+	return 6371.0 * 2.0 * asin(sqrt(clampf(haversine, 0.0, 1.0)))
+
+func transport_route_cost(from_city_id: String, to_city_id: String) -> float:
+	if from_city_id == to_city_id:
+		return -1.0
+	var from_city := get_city(from_city_id)
+	var to_city := get_city(to_city_id)
+	if from_city.is_empty() or to_city.is_empty():
+		return -1.0
+	for route in transport_routes:
+		if (str(route.get("from", "")) == from_city_id and str(route.get("to", "")) == to_city_id) or (str(route.get("from", "")) == to_city_id and str(route.get("to", "")) == from_city_id):
+			return -1.0
+	return maxf(_city_distance_km(from_city, to_city) * 180000.0, 10000000.0)
+
+func build_transport_route(from_city_id: String, to_city_id: String) -> bool:
+	if transport_routes.size() >= 250:
+		return false
+	var cost := transport_route_cost(from_city_id, to_city_id)
+	if cost < 0.0 or treasury < cost:
+		return false
+	var from_city := get_city(from_city_id)
+	var to_city := get_city(to_city_id)
+	transport_routes.append({
+		"id": from_city_id + "__" + to_city_id,
+		"from": from_city_id, "to": to_city_id,
+		"from_name": str(from_city.get("name", "City")),
+		"to_name": str(to_city.get("name", "City")),
+		"distance_km": _city_distance_km(from_city, to_city),
+		"road_level": 1, "traffic": 0.0, "congestion": 0.0,
+		"capacity": 80000.0, "status": "Operational"
+	})
+	treasury -= cost
+	state_changed.emit()
+	return true
+
+func _run_monthly_transport_simulation() -> void:
+	var city_route_counts: Dictionary = {}
+	var city_transport_scores: Dictionary = {}
+	for index in range(transport_routes.size()):
+		var route: Dictionary = transport_routes[index]
+		var from_city := get_city(str(route.get("from", "")))
+		var to_city := get_city(str(route.get("to", "")))
+		if from_city.is_empty() or to_city.is_empty():
+			continue
+		var road_level := maxi(1, int(route.get("road_level", 1)))
+		var traffic := float(int(from_city.get("population", 0)) + int(to_city.get("population", 0))) * 0.025
+		var capacity := 80000.0 * float(road_level)
+		var congestion := clampf((traffic / maxf(capacity, 1.0) - 0.65) * 100.0, 0.0, 100.0)
+		route["traffic"] = traffic
+		route["capacity"] = capacity
+		route["congestion"] = congestion
+		transport_routes[index] = route
+		for city_id in [str(route.get("from", "")), str(route.get("to", ""))]:
+			city_route_counts[city_id] = int(city_route_counts.get(city_id, 0)) + 1
+			city_transport_scores[city_id] = float(city_transport_scores.get(city_id, 0.0)) + float(road_level) * (1.0 - congestion / 150.0)
+	for index in range(cities.size()):
+		var city: Dictionary = cities[index]
+		var city_id := str(city.get("id", ""))
+		var count := int(city_route_counts.get(city_id, 0))
+		var score := float(city_transport_scores.get(city_id, 0.0)) / maxf(float(count), 1.0)
+		city["transport_access"] = clampf(20.0 + score * 16.0 + float(count) * 3.0, 20.0, 100.0)
+		cities[index] = city
+
 func get_city(city_id: String) -> Dictionary:
 	for city in cities:
 		if str(city.get("id", "")) == city_id:
@@ -166,7 +236,8 @@ func _run_monthly_city_simulation() -> void:
 		var education := float(city.get("education", 1))
 		var health := float(city.get("health", 1))
 		var housing := float(city.get("housing", 1))
-		var infrastructure_score := (roads + education + health + housing + float(city.get("power", 1))) / 150.0
+		var transport_effect := float(city.get("transport_access", 20.0)) / 100.0 * 0.00025
+		var infrastructure_score := (roads + education + health + housing + float(city.get("power", 1))) / 150.0 + transport_effect
 		var growth := clampf(0.00045 + infrastructure_score * 0.00035, 0.0002, 0.0012)
 		city["population"] = maxi(10000, int(float(city.get("population", 10000)) * (1.0 + growth)))
 		city["gdp"] = float(city.get("gdp", 0.0)) * (1.0 + annual_gdp_growth / 1200.0 + infrastructure_score * 0.001 + zone_bonus) + building_output * 0.12
@@ -472,6 +543,7 @@ func _advance_day() -> void:
 		_run_monthly_economy()
 		_run_monthly_industry()
 		_run_monthly_infrastructure()
+		_run_monthly_transport_simulation()
 		_run_monthly_city_simulation()
 		_update_market_prices()
 		_run_ai_world_simulation()
@@ -887,6 +959,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	last_trade_report = "No trade transactions yet."
 	infrastructure = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 	_initialize_cities(country)
+	transport_routes.clear()
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
 	tanks = maxi(100, int(gdp / 1800000000.0))
 	aircraft = maxi(40, int(gdp / 5500000000.0))
@@ -919,7 +992,8 @@ func save_game() -> bool:
 		"market_prices": market_prices, "trade_exports": trade_exports,
 		"trade_imports": trade_imports, "trade_balance": trade_balance,
 		"trade_tariff_rate": trade_tariff_rate, "last_trade_report": last_trade_report,
-		"infrastructure": infrastructure, "cities": cities, "selected_city_id": selected_city_id,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
+		"infrastructure": infrastructure, "cities": cities, "selected_city_id": selected_city_id,
+		"transport_routes": transport_routes,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -988,6 +1062,10 @@ func load_game() -> bool:
 		if typeof(city_data) == TYPE_DICTIONARY:
 			cities.append(city_data)
 	selected_city_id = str(data.get("selected_city_id", ""))
+	transport_routes.clear()
+	for route_data in data.get("transport_routes", []):
+		if typeof(route_data) == TYPE_DICTIONARY:
+			transport_routes.append(route_data)
 	regional_funds = data.get("regional_funds", {})
 	selected_region_name = str(data.get("selected_region_name", ""))
 	if cities.is_empty() and not selected_country.is_empty():

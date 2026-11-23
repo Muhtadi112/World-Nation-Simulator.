@@ -38,7 +38,8 @@ func _on_viewport_resized() -> void:
 			"industry": _show_industry()
 			"trade": _show_trade()
 			"infrastructure": _show_infrastructure()
-			"cities": _show_cities()
+			"cities": _show_cities(),
+			"transport": _show_transport()
 
 func _clear() -> void:
 	for child in get_children():
@@ -297,6 +298,7 @@ func _show_dashboard() -> void:
 	side.add_child(_section_label("DEVELOPMENT"))
 	side.add_child(_button("Infrastructure", PANEL_ALT, _show_infrastructure))
 	side.add_child(_button("City & regional management", PANEL_ALT, _show_cities))
+	side.add_child(_button("Transport network", PANEL_ALT, _show_transport))
 	side.add_child(_button("Industry & trade", PANEL_ALT, _show_industry))
 	side.add_child(_button("International trade", PANEL_ALT, _show_trade))
 	side.add_child(_action_button("Research", "Technology tree coming in Phase 2"))
@@ -692,6 +694,88 @@ func _show_budget() -> void:
 	actions.add_child(_button("APPLY FISCAL POLICY", BLUE, func(): GameState.set_budget_policy(tax_slider.value / 100.0, spend_slider.value / 100.0); _show_budget()))
 	actions.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
+
+func _show_transport() -> void:
+	current_screen = "transport"
+	var body := _base("National transport network", "%s  /  Intercity road connections and logistics capacity" % GameState.selected_country.get("name", "Nation"))
+	var summary := HBoxContainer.new()
+	summary.add_theme_constant_override("separation", 10)
+	body.add_child(summary)
+	summary.add_child(_stat_card("ACTIVE ROUTES", str(GameState.transport_routes.size()), "INTERCITY CONNECTIONS"))
+	var total_distance := 0.0
+	var average_congestion := 0.0
+	for route in GameState.transport_routes:
+		total_distance += float(route.get("distance_km", 0.0))
+		average_congestion += float(route.get("congestion", 0.0))
+	if not GameState.transport_routes.is_empty():
+		average_congestion /= float(GameState.transport_routes.size())
+	summary.add_child(_stat_card("NETWORK LENGTH", "%.0f km" % total_distance, "MODELLED ROAD DISTANCE"))
+	summary.add_child(_stat_card("AVG. CONGESTION", "%.1f%%" % average_congestion, "ESTIMATED TRAFFIC PRESSURE"))
+	var builder := PanelContainer.new()
+	builder.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(builder)
+	var builder_box := VBoxContainer.new()
+	builder_box.add_theme_constant_override("separation", 8)
+	builder.add_child(builder_box)
+	builder_box.add_child(_section_label("PLAN A NEW INTERCITY ROAD"))
+	if GameState.cities.size() < 2:
+		builder_box.add_child(_muted_label("At least two catalogued cities are required to construct a route."))
+	else:
+		var selectors := HBoxContainer.new()
+		selectors.add_theme_constant_override("separation", 8)
+		builder_box.add_child(selectors)
+		var from_picker := OptionButton.new()
+		var to_picker := OptionButton.new()
+		from_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		to_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		for city in GameState.cities:
+			var city_name := str(city.get("name", "City"))
+			from_picker.add_item(city_name)
+			to_picker.add_item(city_name)
+		if to_picker.item_count > 1:
+			to_picker.select(1)
+		selectors.add_child(from_picker)
+		selectors.add_child(to_picker)
+		var estimate := _muted_label("")
+		builder_box.add_child(estimate)
+		var update_estimate := func() -> void:
+			var a := str(GameState.cities[from_picker.selected].get("id", ""))
+			var b := str(GameState.cities[to_picker.selected].get("id", ""))
+			var cost := GameState.transport_route_cost(a, b)
+			estimate.text = "Estimated construction cost: %s" % (_money(cost) if cost >= 0.0 else "Route unavailable / already connected")
+		from_picker.item_selected.connect(func(_index: int): update_estimate.call())
+		to_picker.item_selected.connect(func(_index: int): update_estimate.call())
+		update_estimate.call()
+		builder_box.add_child(_button("CONSTRUCT ROAD CONNECTION", BLUE, func():
+			var a := str(GameState.cities[from_picker.selected].get("id", ""))
+			var b := str(GameState.cities[to_picker.selected].get("id", ""))
+			if GameState.build_transport_route(a, b):
+				_show_transport()
+			else:
+				_show_toast("Construction failed: choose two different unconnected cities and check treasury.")
+		))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 7)
+	scroll.add_child(rows)
+	rows.add_child(_section_label("ROAD CONNECTION REGISTER"))
+	if GameState.transport_routes.is_empty():
+		rows.add_child(_muted_label("No intercity roads have been built. Select two cities above to establish the first connection."))
+	else:
+		for route in GameState.transport_routes:
+			var panel := PanelContainer.new()
+			panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 8))
+			rows.add_child(panel)
+			var info := VBoxContainer.new()
+			panel.add_child(info)
+			info.add_child(_muted_label("%s  ↔  %s" % [route.get("from_name", "City"), route.get("to_name", "City")]))
+			info.add_child(_muted_label("%.0f km  •  Road level %d  •  Traffic %.0f / %.0f  •  Congestion %.1f%%" % [float(route.get("distance_km", 0.0)), int(route.get("road_level", 1)), float(route.get("traffic", 0.0)), float(route.get("capacity", 80000.0)), float(route.get("congestion", 0.0))]))
+	body.add_child(_muted_label("Transport is a strategic prototype: route distance uses city coordinates; traffic and capacity are simplified estimates, not turn-by-turn pathfinding or real road geometry."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_cities() -> void:
 	current_screen = "cities"
