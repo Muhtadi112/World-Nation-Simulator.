@@ -258,37 +258,34 @@ func trade_with_country(country_id: String, commodity: String, direction: String
 		return false
 	var price := float(market_prices.get(commodity, 1000.0))
 	var total_value := price * units
+	var partner_stock: Dictionary = nation.get("resource_stockpiles", {})
+	var partner_treasury := float(nation.get("treasury", 0.0))
 	if direction == "export":
 		var available := float(resource_stockpiles.get(commodity, 0.0))
-		if available < units:
+		if available < units or partner_treasury < total_value:
 			return false
 		resource_stockpiles[commodity] = available - units
 		treasury += total_value
 		trade_exports += total_value
+		trade_balance += total_value
+		partner_treasury -= total_value
+		partner_stock[commodity] = float(partner_stock.get(commodity, 0.0)) + units
 	else:
+		var partner_available := float(partner_stock.get(commodity, 0.0))
 		var tariff := total_value * trade_tariff_rate
-		if treasury < total_value + tariff:
+		if partner_available < units or treasury < total_value + tariff:
 			return false
 		treasury -= total_value + tariff
 		resource_stockpiles[commodity] = float(resource_stockpiles.get(commodity, 0.0)) + units
 		trade_imports += total_value
 		trade_balance -= total_value
-		trade_balance += 0.0
-		trade_exports = maxf(0.0, trade_exports)
-		treaty["last_import_tariff"] = tariff
-		diplomacy_relations[country_id] = treaty
-		trade_balance -= tariff
-	if direction == "export":
-		trade_balance += total_value
-	var partner_treasury := float(nation.get("treasury", 0.0))
-	if direction == "export":
-		partner_treasury = maxf(0.0, partner_treasury - total_value)
-	else:
 		partner_treasury += total_value
+		partner_stock[commodity] = partner_available - units
 	for index in range(ai_countries.size()):
 		if str(ai_countries[index].get("id", "")) == country_id:
 			var updated: Dictionary = ai_countries[index]
 			updated["treasury"] = partner_treasury
+			updated["resource_stockpiles"] = partner_stock
 			ai_countries[index] = updated
 			break
 	last_trade_report = "%s %s units of %s with %s for %s." % [direction.capitalize(), _format_trade_units(units), commodity, str(nation.get("name", country_id)), _format_trade_money(total_value)]
@@ -340,7 +337,13 @@ func _initialize_ai_countries() -> void:
 			"growth": 1.0 + seed_value * 5.0,
 			"stability": 48.0 + seed_value * 42.0,
 			"tax_rate": 0.12 + seed_value * 0.14,
-			"spending_rate": 0.13 + seed_value * 0.12
+			"spending_rate": 0.13 + seed_value * 0.12,
+		"resource_stockpiles": {
+			"food": float(country.get("population", 1000000)) * 0.025,
+			"energy": base_gdp / 1000000000.0 * 1.8,
+			"metals": base_gdp / 10000000000.0 * 2.5,
+			"goods": base_gdp / 10000000000.0 * 1.7
+		}
 		})
 
 func _run_ai_world_simulation() -> void:
