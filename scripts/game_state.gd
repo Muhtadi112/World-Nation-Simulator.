@@ -17,6 +17,14 @@ var population: int = 281000000
 var gdp: float = 1371000000000.0
 var inflation: float = 2.8
 var unemployment: float = 4.9
+var debt: float = 0.0
+var tax_rate: float = 0.18
+var spending_rate: float = 0.165
+var monthly_revenue: float = 0.0
+var monthly_expenses: float = 0.0
+var monthly_balance: float = 0.0
+var annual_gdp_growth: float = 3.2
+var stability: float = 72.0
 var _day_accumulator: float = 0.0
 
 const CAPITALS := {
@@ -131,6 +139,39 @@ func _advance_day() -> void:
 		if int(game_date["month"]) > 12:
 			game_date["month"] = 1
 			game_date["year"] += 1
+	_run_monthly_economy()
+	state_changed.emit()
+
+func _run_monthly_economy() -> void:
+	if gdp <= 0.0:
+		return
+	monthly_revenue = gdp * tax_rate / 12.0
+	monthly_expenses = gdp * spending_rate / 12.0
+	monthly_balance = monthly_revenue - monthly_expenses
+	treasury += monthly_balance
+	if treasury < 0.0:
+		debt += absf(treasury)
+		treasury = 0.0
+	else:
+		var debt_payment := minf(treasury * 0.08, debt)
+		treasury -= debt_payment
+		debt -= debt_payment
+	var monthly_growth := (annual_gdp_growth / 100.0) / 12.0
+	var investment_effect := (spending_rate - 0.12) * 0.004
+	var stability_effect := (stability - 50.0) * 0.000015
+	var inflation_effect := maxf(0.0, inflation - 5.0) * 0.00008
+	gdp *= 1.0 + monthly_growth + investment_effect + stability_effect - inflation_effect
+	var annual_population_growth := 0.008 + (stability - 50.0) * 0.00004 - maxf(0.0, unemployment - 8.0) * 0.0001
+	population = maxi(1, int(float(population) * (1.0 + annual_population_growth / 12.0)))
+	var demand_pressure := (spending_rate - tax_rate) * 0.08
+	inflation = clampf(inflation + demand_pressure, 0.0, 40.0)
+	unemployment = clampf(unemployment - (annual_gdp_growth - 2.0) * 0.015 + (inflation - 6.0) * 0.008, 1.0, 35.0)
+	stability = clampf(stability + (monthly_balance / maxf(gdp / 12.0, 1.0)) * 1.5 - maxf(0.0, inflation - 8.0) * 0.08, 0.0, 100.0)
+	annual_gdp_growth = clampf(annual_gdp_growth + (stability - 60.0) * 0.001 - maxf(0.0, inflation - 5.0) * 0.01, -15.0, 20.0)
+
+func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
+	tax_rate = clampf(new_tax_rate, 0.05, 0.40)
+	spending_rate = clampf(new_spending_rate, 0.05, 0.45)
 	state_changed.emit()
 
 func start_new_game(mode: String, country: Dictionary) -> void:
@@ -143,6 +184,14 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	simulation_speed = 1
 	is_paused = false
 	_day_accumulator = 0.0
+	debt = gdp * 0.35
+	tax_rate = 0.18
+	spending_rate = 0.165
+	monthly_revenue = 0.0
+	monthly_expenses = 0.0
+	monthly_balance = 0.0
+	annual_gdp_growth = 3.2
+	stability = 72.0
 	state_changed.emit()
 
 func save_game() -> bool:
@@ -153,7 +202,11 @@ func save_game() -> bool:
 	var payload := {
 		"game_mode": game_mode, "selected_country": selected_country,
 		"game_date": game_date, "treasury": treasury, "population": population,
-		"gdp": gdp, "inflation": inflation, "unemployment": unemployment
+		"gdp": gdp, "inflation": inflation, "unemployment": unemployment,
+		"debt": debt, "tax_rate": tax_rate, "spending_rate": spending_rate,
+		"monthly_revenue": monthly_revenue, "monthly_expenses": monthly_expenses,
+		"monthly_balance": monthly_balance, "annual_gdp_growth": annual_gdp_growth,
+		"stability": stability
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -183,6 +236,14 @@ func load_game() -> bool:
 	gdp = float(data.get("gdp", 0.0))
 	inflation = float(data.get("inflation", 2.8))
 	unemployment = float(data.get("unemployment", 4.9))
+	debt = float(data.get("debt", gdp * 0.35))
+	tax_rate = float(data.get("tax_rate", 0.18))
+	spending_rate = float(data.get("spending_rate", 0.165))
+	monthly_revenue = float(data.get("monthly_revenue", 0.0))
+	monthly_expenses = float(data.get("monthly_expenses", 0.0))
+	monthly_balance = float(data.get("monthly_balance", 0.0))
+	annual_gdp_growth = float(data.get("annual_gdp_growth", 3.2))
+	stability = float(data.get("stability", 72.0))
 	state_changed.emit()
 	return not selected_country.is_empty()
 

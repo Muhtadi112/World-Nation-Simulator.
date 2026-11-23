@@ -29,6 +29,7 @@ func _on_viewport_resized() -> void:
 			"home": _show_home()
 			"countries": _show_country_select()
 			"dashboard": _show_dashboard()
+			"budget": _show_budget()
 
 func _clear() -> void:
 	for child in get_children():
@@ -251,6 +252,8 @@ func _show_dashboard() -> void:
 	stats.add_child(_stat_card("TREASURY", _money(GameState.treasury), "AVAILABLE FUNDS"))
 	stats.add_child(_stat_card("INFLATION", "%.1f%%" % GameState.inflation, "ANNUAL"))
 	stats.add_child(_stat_card("UNEMPLOYMENT", "%.1f%%" % GameState.unemployment, "LABOR MARKET"))
+	stats.add_child(_stat_card("PUBLIC DEBT", _money(GameState.debt), "GOVERNMENT LIABILITIES"))
+	stats.add_child(_stat_card("GDP GROWTH", "%.1f%%" % GameState.annual_gdp_growth, "ANNUAL ESTIMATE"))
 	var main_row := HBoxContainer.new()
 	main_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_row.add_theme_constant_override("separation", 12)
@@ -277,7 +280,7 @@ func _show_dashboard() -> void:
 	side.add_theme_constant_override("separation", 8)
 	main_row.add_child(side)
 	side.add_child(_section_label("GOVERNMENT"))
-	side.add_child(_action_button("National budget", "Budget management coming in Phase 2"))
+	side.add_child(_button("National budget", PANEL_ALT, _show_budget))
 	side.add_child(_action_button("Cabinet & ministries", "Government simulation coming in Phase 2"))
 	side.add_child(_action_button("Diplomacy", "International relations coming in Phase 2"))
 	side.add_child(_section_label("DEVELOPMENT"))
@@ -286,11 +289,62 @@ func _show_dashboard() -> void:
 	side.add_child(_action_button("Research", "Technology tree coming in Phase 2"))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
-	note.text = "Real country boundaries • 177 mapped features • baseline statistics are approximate historical estimates."
+	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
 	note.add_theme_color_override("font_color", MUTED)
 	note.add_theme_font_size_override("font_size", 10)
 	body.add_child(note)
 	GameState.state_changed.connect(_refresh_dashboard, CONNECT_ONE_SHOT)
+
+func _show_budget() -> void:
+	current_screen = "budget"
+	var country: Dictionary = GameState.selected_country
+	var body := _base("National budget", "%s  /  Fiscal policy and monthly public finances" % country.get("name", "Nation"))
+	var summary := HBoxContainer.new()
+	summary.add_theme_constant_override("separation", 10)
+	body.add_child(summary)
+	summary.add_child(_stat_card("MONTHLY REVENUE", _money(GameState.monthly_revenue), "TAX COLLECTION"))
+	summary.add_child(_stat_card("MONTHLY EXPENSES", _money(GameState.monthly_expenses), "PUBLIC SPENDING"))
+	summary.add_child(_stat_card("MONTHLY BALANCE", _money(GameState.monthly_balance), "SURPLUS / DEFICIT"))
+	var debt_panel := PanelContainer.new()
+	debt_panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(debt_panel)
+	var debt_info := VBoxContainer.new()
+	debt_panel.add_child(debt_info)
+	debt_info.add_child(_section_label("FISCAL POSITION"))
+	debt_info.add_child(_muted_label("Public debt: %s  •  Debt-to-GDP: %.1f%%" % [_money(GameState.debt), (GameState.debt / maxf(GameState.gdp, 1.0)) * 100.0]))
+	debt_info.add_child(_muted_label("Treasury: %s" % _money(GameState.treasury)))
+	var policy := PanelContainer.new()
+	policy.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	policy.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(policy)
+	var controls := VBoxContainer.new()
+	controls.add_theme_constant_override("separation", 12)
+	policy.add_child(controls)
+	controls.add_child(_section_label("FISCAL POLICY"))
+	var tax_label := _muted_label("Average tax rate: %.1f%%" % (GameState.tax_rate * 100.0))
+	controls.add_child(tax_label)
+	var tax_slider := HSlider.new()
+	tax_slider.min_value = 5
+	tax_slider.max_value = 40
+	tax_slider.step = 0.5
+	tax_slider.value = GameState.tax_rate * 100.0
+	tax_slider.value_changed.connect(func(value: float): tax_label.text = "Average tax rate: %.1f%%" % value)
+	controls.add_child(tax_slider)
+	var spend_label := _muted_label("Public spending: %.1f%% of GDP" % (GameState.spending_rate * 100.0))
+	controls.add_child(spend_label)
+	var spend_slider := HSlider.new()
+	spend_slider.min_value = 5
+	spend_slider.max_value = 45
+	spend_slider.step = 0.5
+	spend_slider.value = GameState.spending_rate * 100.0
+	spend_slider.value_changed.connect(func(value: float): spend_label.text = "Public spending: %.1f%% of GDP" % value)
+	controls.add_child(spend_slider)
+	controls.add_child(_muted_label("Policy changes take effect in the next monthly economic update. Higher spending can support growth but may increase inflation and deficits."))
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 10)
+	body.add_child(actions)
+	actions.add_child(_button("APPLY FISCAL POLICY", BLUE, func(): GameState.set_budget_policy(tax_slider.value / 100.0, spend_slider.value / 100.0); _show_budget()))
+	actions.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _on_map_country_selected(country: Dictionary) -> void:
 	var full_country := GameState.find_country(str(country.get("id", "")))
