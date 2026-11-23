@@ -721,6 +721,11 @@ func _show_cities() -> void:
 			region_metrics.text = "%s GDP  •  QoL %.1f" % [_money(float(region.get("gdp", 0.0))), float(region.get("average_quality_of_life", 0.0))]
 			region_metrics.add_theme_color_override("font_color", MUTED)
 			region_row.add_child(region_metrics)
+	var city_map := Control.new()
+	city_map.set_script(load("res://scripts/city_map.gd"))
+	city_map.custom_minimum_size = Vector2(0, 230)
+	city_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_child(city_map)
 	var search := LineEdit.new()
 	search.placeholder_text = "Search city or region..."
 	search.custom_minimum_size.y = 42
@@ -790,6 +795,11 @@ func _show_cities() -> void:
 			))
 	)
 	search.text_changed.emit("")
+	city_map.connect("city_selected", func(city_id: String):
+		GameState.selected_city_id = city_id
+		selected = GameState.get_city(city_id)
+		refresh_detail.call()
+	)
 	refresh_detail.call()
 	body.add_child(_muted_label("City population is capped at 60% of the national baseline for catalogued urban centres; GDP is an estimated 70% urban allocation. Regional totals aggregate listed cities only. Administrative labels are not yet complete province boundary data."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
