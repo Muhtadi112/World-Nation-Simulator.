@@ -16,6 +16,7 @@ var toast_label: Label
 var country_list: VBoxContainer
 var selected_country: Dictionary = {}
 var current_screen: String = "home"
+var country_search_text: String = ""
 
 func _ready() -> void:
 	get_viewport().size_changed.connect(_on_viewport_resized)
@@ -138,14 +139,28 @@ func _show_country_select() -> void:
 	list.add_theme_constant_override("separation", 7)
 	list_scroll.add_child(list)
 	var list_title := Label.new()
-	list_title.text = "AVAILABLE NATIONS"
+	list_title.text = "COUNTRY DATABASE  •  %d NATIONS / AREAS" % GameState.country_catalog.size()
 	list_title.add_theme_color_override("font_color", CYAN)
 	list_title.add_theme_font_size_override("font_size", 11)
 	list.add_child(list_title)
-	for country in GameState.COUNTRIES:
-		var item := _button("%s   %s   •   %s" % [country["flag"], country["name"], country["region"]], PANEL_ALT, func(c: Dictionary = country): _select_country(c))
+	var search := LineEdit.new()
+	search.placeholder_text = "Search country or ISO code..."
+	search.text = country_search_text
+	search.clear_button_enabled = true
+	search.text_changed.connect(_on_country_search_changed)
+	list.add_child(search)
+	var matches := 0
+	for country in GameState.country_catalog:
+		var query := country_search_text.strip_edges().to_lower()
+		var haystack := ("%s %s %s" % [country.name, country.id, country.region]).to_lower()
+		if not query.is_empty() and not haystack.contains(query):
+			continue
+		var item := _button("%s   %s   •   %s" % [country.flag, country.name, country.region], PANEL_ALT, func(c: Dictionary = country): _select_country(c))
 		item.custom_minimum_size.y = 42
 		list.add_child(item)
+		matches += 1
+	if matches == 0:
+		list.add_child(_muted_label("No matching country found."))
 	var right := PanelContainer.new()
 	right.custom_minimum_size.x = 340
 	right.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 14))
@@ -157,7 +172,10 @@ func _show_country_select() -> void:
 	hint.text = "COUNTRY PROFILE"
 	hint.add_theme_color_override("font_color", GOLD)
 	detail.add_child(hint)
-	var chosen := selected_country if not selected_country.is_empty() else GameState.COUNTRIES[0]
+	var chosen := selected_country if not selected_country.is_empty() else (GameState.country_catalog[0] if not GameState.country_catalog.is_empty() else {})
+	if chosen.is_empty():
+		detail.add_child(_muted_label("Country database could not be loaded."))
+		return
 	var name := Label.new()
 	name.text = "%s %s" % [chosen["flag"], chosen["name"]]
 	name.add_theme_font_size_override("font_size", 22)
@@ -166,10 +184,16 @@ func _show_country_select() -> void:
 	detail.add_child(_muted_label("Capital: %s" % chosen["capital"]))
 	detail.add_child(_muted_label("Population: %s" % _format_number(int(chosen["population"]))))
 	detail.add_child(_muted_label("GDP: %s" % _money(float(chosen["gdp"]))))
-	detail.add_child(_muted_label("Currency: %s" % chosen["currency"]))
+	detail.add_child(_muted_label("Currency: %s" % chosen.get("currency", "Not listed")))
+	detail.add_child(_muted_label("Source baseline: Natural Earth / approx. 2019"))
+	detail.add_child(_muted_label("Some capitals and currencies are not yet catalogued."))
 	var launch := _button("START SIMULATION  →", BLUE, func(): _start_selected(chosen))
 	detail.add_child(launch)
 	detail.add_child(_button("BACK", PANEL_ALT, _show_home))
+
+func _on_country_search_changed(value: String) -> void:
+	country_search_text = value
+	_show_country_select()
 
 func _select_country(country: Dictionary) -> void:
 	selected_country = country.duplicate(true)
@@ -249,15 +273,18 @@ func _show_dashboard() -> void:
 	side.add_child(_action_button("Research", "Technology tree coming in Phase 2"))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
-	note.text = "Phase 1 foundation • Map art is illustrative; real geographic boundaries are not integrated yet."
+	note.text = "Real country boundaries • 177 mapped features • baseline statistics are approximate historical estimates."
 	note.add_theme_color_override("font_color", MUTED)
 	note.add_theme_font_size_override("font_size", 10)
 	body.add_child(note)
 	GameState.state_changed.connect(_refresh_dashboard, CONNECT_ONE_SHOT)
 
 func _on_map_country_selected(country: Dictionary) -> void:
-	selected_country = country.duplicate(true)
-	_show_toast("Selected: %s  •  %s" % [country.get("name", "Unknown"), country.get("id", "")])
+	var full_country := GameState.find_country(str(country.get("id", "")))
+	if full_country.is_empty():
+		full_country = country.duplicate(true)
+	selected_country = full_country
+	_show_toast("Map focus: %s  •  %s" % [full_country.get("name", "Unknown"), full_country.get("id", "")])
 
 func _refresh_dashboard() -> void:
 	if current_screen == "dashboard":
