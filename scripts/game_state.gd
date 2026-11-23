@@ -39,17 +39,21 @@ func _initialize_cities(country: Dictionary) -> void:
 		if str(entry.get("country", "")) == country_id:
 			matching.append(entry)
 			total_catalog_population += float(entry.get("population", 0))
-	if matching.is_empty():
-		var capital_name := str(country.get("capital", "Capital"))
-		matching.append({"id": country_id + "_CAPITAL", "name": capital_name, "region": str(country.get("region", "National Capital District")), "population": maxf(float(population) * 0.12, 10000.0), "lat": 0.0, "lon": 0.0, "tier": 1})
-		total_catalog_population = float(matching[0].get("population", 10000))
 	var national_population := maxf(float(country.get("population", population)), 1.0)
 	var national_gdp := maxf(float(country.get("gdp", gdp)), 1.0)
+	var allocated_population := minf(national_population * 0.60, total_catalog_population)
+	var allocated_gdp := national_gdp * 0.70
+	if matching.is_empty():
+		var capital_name := str(country.get("capital", "Capital"))
+		matching.append({"id": country_id + "_CAPITAL", "name": capital_name, "region": str(country.get("region", "National Capital District")), "population": maxf(national_population * 0.12, 10000.0), "lat": 0.0, "lon": 0.0, "tier": 1})
+		total_catalog_population = float(matching[0].get("population", 10000))
+		allocated_population = minf(national_population * 0.12, total_catalog_population)
+		allocated_gdp = national_gdp * 0.22
 	for entry in matching:
 		var source_population := maxf(float(entry.get("population", 10000)), 1.0)
 		var share := source_population / maxf(total_catalog_population, 1.0)
-		var city_population := maxi(10000, int(national_population * share))
-		var city_gdp := national_gdp * share
+		var city_population := maxi(10000, int(allocated_population * share))
+		var city_gdp := allocated_gdp * share
 		cities.append({
 			"id": str(entry.get("id", country_id + "_CITY")),
 			"name": str(entry.get("name", "Unnamed City")),
@@ -67,6 +71,40 @@ func _initialize_cities(country: Dictionary) -> void:
 		})
 	if not cities.is_empty():
 		selected_city_id = str(cities[0].get("id", ""))
+
+func get_regions() -> Array[Dictionary]:
+	var grouped: Dictionary = {}
+	for city in cities:
+		var region_name := str(city.get("region", "Unassigned Region"))
+		if not grouped.has(region_name):
+			grouped[region_name] = {
+				"name": region_name, "city_count": 0, "population": 0,
+				"gdp": 0.0, "quality_of_life_total": 0.0,
+				"employment_total": 0.0, "cities": []
+			}
+		var region: Dictionary = grouped[region_name]
+		region["city_count"] = int(region.get("city_count", 0)) + 1
+		region["population"] = int(region.get("population", 0)) + int(city.get("population", 0))
+		region["gdp"] = float(region.get("gdp", 0.0)) + float(city.get("gdp", 0.0))
+		region["quality_of_life_total"] = float(region.get("quality_of_life_total", 0.0)) + float(city.get("quality_of_life", 0.0))
+		region["employment_total"] = float(region.get("employment_total", 0.0)) + float(city.get("employment", 0.0))
+		var member_cities: Array = region.get("cities", [])
+		member_cities.append(str(city.get("name", "City")))
+		region["cities"] = member_cities
+		grouped[region_name] = region
+	var result: Array[Dictionary] = []
+	for key in grouped.keys():
+		var region: Dictionary = grouped[key]
+		var count := maxi(1, int(region.get("city_count", 1)))
+		region["average_quality_of_life"] = float(region.get("quality_of_life_total", 0.0)) / count
+		region["average_employment"] = float(region.get("employment_total", 0.0)) / count
+		region.erase("quality_of_life_total")
+		region.erase("employment_total")
+		result.append(region)
+	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("population", 0)) > int(b.get("population", 0))
+	)
+	return result
 
 func get_city(city_id: String) -> Dictionary:
 	for city in cities:

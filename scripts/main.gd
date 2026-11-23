@@ -696,7 +696,31 @@ func _show_budget() -> void:
 func _show_cities() -> void:
 	current_screen = "cities"
 	var country: Dictionary = GameState.selected_country
-	var body := _base("Cities & regional administration", "%s  /  %d catalogued cities • simulated regional districts" % [country.get("name", "Nation"), GameState.cities.size()])
+	var regions := GameState.get_regions()
+	var body := _base("Cities & regional administration", "%s  /  %d cities across %d simulated regions" % [country.get("name", "Nation"), GameState.cities.size(), regions.size()])
+	var regional_panel := PanelContainer.new()
+	regional_panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(regional_panel)
+	var regional_box := VBoxContainer.new()
+	regional_box.add_theme_constant_override("separation", 8)
+	regional_panel.add_child(regional_box)
+	regional_box.add_child(_section_label("REGIONAL OVERVIEW"))
+	if regions.is_empty():
+		regional_box.add_child(_muted_label("No regional records available."))
+	else:
+		for region in regions:
+			var region_row := HBoxContainer.new()
+			region_row.add_theme_constant_override("separation", 10)
+			regional_box.add_child(region_row)
+			var region_label := Label.new()
+			region_label.text = "%s  •  %d cities  •  %s residents" % [region.get("name", "Region"), int(region.get("city_count", 0)), _format_number(int(region.get("population", 0)))]
+			region_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			region_label.add_theme_color_override("font_color", TEXT)
+			region_row.add_child(region_label)
+			var region_metrics := Label.new()
+			region_metrics.text = "%s GDP  •  QoL %.1f" % [_money(float(region.get("gdp", 0.0))), float(region.get("average_quality_of_life", 0.0))]
+			region_metrics.add_theme_color_override("font_color", MUTED)
+			region_row.add_child(region_metrics)
 	var search := LineEdit.new()
 	search.placeholder_text = "Search city or region..."
 	search.custom_minimum_size.y = 42
@@ -727,11 +751,12 @@ func _show_cities() -> void:
 		metrics.add_theme_constant_override("separation", 8)
 		detail.add_child(metrics)
 		metrics.add_child(_stat_card("POPULATION", _format_number(int(selected.get("population", 0))), "CITY RESIDENTS"))
-		metrics.add_child(_stat_card("GDP", _money(float(selected.get("gdp", 0.0))), "MONTHLY MODEL BASE"))
+		metrics.add_child(_stat_card("GDP", _money(float(selected.get("gdp", 0.0))), "CITY ECONOMIC BASE"))
 		metrics.add_child(_stat_card("QUALITY OF LIFE", "%.1f / 100" % float(selected.get("quality_of_life", 0.0)), "DEVELOPMENT INDEX"))
 		detail.add_child(_muted_label("Employment %.1f%%  •  Development %.1f / 100  •  Coordinates %.2f°, %.2f°" % [float(selected.get("employment", 0.0)), float(selected.get("development_index", 0.0)), float(selected.get("lat", 0.0)), float(selected.get("lon", 0.0))]))
-		var projects := HBoxContainer.new()
-		projects.add_theme_constant_override("separation", 7)
+		var projects := HFlowContainer.new()
+		projects.add_theme_constant_override("h_separation", 7)
+		projects.add_theme_constant_override("v_separation", 7)
 		detail.add_child(projects)
 		for category in ["roads", "power", "housing", "health", "education"]:
 			var cost := GameState.city_upgrade_cost(str(selected.get("id", "")), category)
@@ -741,7 +766,7 @@ func _show_cities() -> void:
 				else:
 					_show_toast("Project unavailable: insufficient treasury or maximum level reached.")
 			)
-			project_button.custom_minimum_size.x = 145
+			project_button.custom_minimum_size.x = 170
 			projects.add_child(project_button)
 	search.text_changed.connect(func(query: String):
 		for child in rows.get_children():
@@ -766,8 +791,9 @@ func _show_cities() -> void:
 	)
 	search.text_changed.emit("")
 	refresh_detail.call()
-	body.add_child(_muted_label("Offline city catalogue currently covers selected major urban centres; population and GDP are allocated proportionally from the national baseline. Regional names are administrative labels, not a complete province-boundary dataset."))
+	body.add_child(_muted_label("City population is capped at 60% of the national baseline for catalogued urban centres; GDP is an estimated 70% urban allocation. Regional totals aggregate listed cities only. Administrative labels are not yet complete province boundary data."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
 
 func _on_map_country_selected(country: Dictionary) -> void:
 	var full_country := GameState.find_country(str(country.get("id", "")))
