@@ -9,6 +9,7 @@ const COUNTRY_DATA_PATH := "res://data/countries_110m.json"
 var game_mode: String = "Career"
 var selected_country: Dictionary = {}
 var country_catalog: Array[Dictionary] = []
+var ai_countries: Array[Dictionary] = []
 var game_date: Dictionary = {"year": 2026, "month": 1, "day": 1}
 var simulation_speed: int = 1
 var is_paused: bool = false
@@ -143,6 +144,7 @@ func _advance_day() -> void:
 			game_date["year"] += 1
 	if month_changed:
 		_run_monthly_economy()
+		_run_ai_world_simulation()
 	state_changed.emit()
 
 func _run_monthly_economy() -> void:
@@ -172,6 +174,72 @@ func _run_monthly_economy() -> void:
 	stability = clampf(stability + (monthly_balance / maxf(gdp / 12.0, 1.0)) * 1.5 - maxf(0.0, inflation - 8.0) * 0.08, 0.0, 100.0)
 	annual_gdp_growth = clampf(annual_gdp_growth + (stability - 60.0) * 0.001 - maxf(0.0, inflation - 5.0) * 0.01, -15.0, 20.0)
 
+func _initialize_ai_countries() -> void:
+	ai_countries.clear()
+	var player_id := str(selected_country.get("id", ""))
+	for country in country_catalog:
+		var country_id := str(country.get("id", ""))
+		if country_id == player_id:
+			continue
+		var base_gdp := maxf(float(country.get("gdp", 1000000000.0)), 1000000.0)
+		var seed_value := float(abs(country_id.hash()) % 1000) / 1000.0
+		ai_countries.append({
+			"id": country_id, "name": str(country.get("name", "Unknown")),
+			"flag": str(country.get("flag", "🏳")), "capital": str(country.get("capital", "Not listed")),
+			"region": str(country.get("region", "Other")),
+			"population": maxi(1, int(country.get("population", 1000000))),
+			"gdp": base_gdp, "debt": base_gdp * (0.18 + seed_value * 0.42),
+			"treasury": base_gdp * (0.04 + seed_value * 0.10),
+			"inflation": 1.5 + seed_value * 5.0,
+			"unemployment": 3.0 + seed_value * 7.0,
+			"growth": 1.0 + seed_value * 5.0,
+			"stability": 48.0 + seed_value * 42.0,
+			"tax_rate": 0.12 + seed_value * 0.14,
+			"spending_rate": 0.13 + seed_value * 0.12
+		})
+
+func _run_ai_world_simulation() -> void:
+	for index in range(ai_countries.size()):
+		var nation: Dictionary = ai_countries[index]
+		var nation_gdp := maxf(float(nation.get("gdp", 1.0)), 1.0)
+		var tax := float(nation.get("tax_rate", 0.18))
+		var spending := float(nation.get("spending_rate", 0.17))
+		var revenue := nation_gdp * tax / 12.0
+		var expenses := nation_gdp * spending / 12.0
+		var balance := revenue - expenses
+		var cash := float(nation.get("treasury", 0.0)) + balance
+		var nation_debt := float(nation.get("debt", 0.0))
+		if cash < 0.0:
+			nation_debt += absf(cash)
+			cash = 0.0
+		else:
+			var repayment := minf(cash * 0.04, nation_debt)
+			cash -= repayment
+			nation_debt -= repayment
+		var nation_stability := float(nation.get("stability", 60.0))
+		var nation_inflation := float(nation.get("inflation", 3.0))
+		var growth := float(nation.get("growth", 2.5))
+		var growth_delta := growth / 1200.0 + (nation_stability - 55.0) * 0.000008 - maxf(0.0, nation_inflation - 7.0) * 0.00004
+		nation_gdp *= maxf(0.80, 1.0 + growth_delta)
+		nation_inflation = clampf(nation_inflation + (spending - tax) * 0.035, 0.0, 45.0)
+		var unemployment_rate := clampf(float(nation.get("unemployment", 5.0)) - (growth - 2.0) * 0.008 + maxf(0.0, nation_inflation - 8.0) * 0.004, 1.0, 40.0)
+		nation_stability = clampf(nation_stability + (balance / maxf(nation_gdp / 12.0, 1.0)) * 0.18 - maxf(0.0, nation_inflation - 9.0) * 0.025, 5.0, 100.0)
+		var annual_pop_growth := 0.006 + (nation_stability - 50.0) * 0.000025 - maxf(0.0, unemployment_rate - 10.0) * 0.00005
+		nation["population"] = maxi(1, int(float(nation.get("population", 1)) * (1.0 + annual_pop_growth / 12.0)))
+		nation["gdp"] = nation_gdp
+		nation["debt"] = nation_debt
+		nation["treasury"] = cash
+		nation["inflation"] = nation_inflation
+		nation["unemployment"] = unemployment_rate
+		nation["stability"] = nation_stability
+		ai_countries[index] = nation
+
+func get_ai_country(country_id: String) -> Dictionary:
+	for nation in ai_countries:
+		if str(nation.get("id", "")) == country_id:
+			return nation.duplicate(true)
+	return {}
+
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0
 	monthly_expenses = maxf(0.0, gdp) * spending_rate / 12.0
@@ -199,6 +267,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	_update_budget_forecast()
 	annual_gdp_growth = 3.2
 	stability = 72.0
+	_initialize_ai_countries()
 	state_changed.emit()
 
 func save_game() -> bool:
@@ -213,7 +282,7 @@ func save_game() -> bool:
 		"debt": debt, "tax_rate": tax_rate, "spending_rate": spending_rate,
 		"monthly_revenue": monthly_revenue, "monthly_expenses": monthly_expenses,
 		"monthly_balance": monthly_balance, "annual_gdp_growth": annual_gdp_growth,
-		"stability": stability
+		"stability": stability, "ai_countries": ai_countries
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -251,6 +320,12 @@ func load_game() -> bool:
 	monthly_balance = float(data.get("monthly_balance", 0.0))
 	annual_gdp_growth = float(data.get("annual_gdp_growth", 3.2))
 	stability = float(data.get("stability", 72.0))
+	ai_countries.clear()
+	for nation in data.get("ai_countries", []):
+		if typeof(nation) == TYPE_DICTIONARY:
+			ai_countries.append(nation)
+	if ai_countries.is_empty():
+		_initialize_ai_countries()
 	_update_budget_forecast()
 	state_changed.emit()
 	return not selected_country.is_empty()

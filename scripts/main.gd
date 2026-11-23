@@ -281,6 +281,7 @@ func _show_dashboard() -> void:
 	main_row.add_child(side)
 	side.add_child(_section_label("GOVERNMENT"))
 	side.add_child(_button("National budget", PANEL_ALT, _show_budget))
+	side.add_child(_button("World nations / AI", PANEL_ALT, _show_world_nations))
 	side.add_child(_action_button("Cabinet & ministries", "Government simulation coming in Phase 2"))
 	side.add_child(_action_button("Diplomacy", "International relations coming in Phase 2"))
 	side.add_child(_section_label("DEVELOPMENT"))
@@ -294,6 +295,41 @@ func _show_dashboard() -> void:
 	note.add_theme_font_size_override("font_size", 10)
 	body.add_child(note)
 	GameState.state_changed.connect(_refresh_dashboard, CONNECT_ONE_SHOT)
+
+func _show_world_nations() -> void:
+	current_screen = "world"
+	var body := _base("World nations", "AI-controlled countries • monthly simulation • %d nations" % GameState.ai_countries.size())
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 6)
+	scroll.add_child(rows)
+	var nations := GameState.ai_countries.duplicate(true)
+	nations.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.get("gdp", 0.0)) > float(b.get("gdp", 0.0)))
+	for nation in nations:
+		var row := PanelContainer.new()
+		row.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 8))
+		rows.add_child(row)
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 12)
+		row.add_child(line)
+		var identity := Label.new()
+		identity.text = "%s  %s  •  %s" % [nation.get("flag", "🏳"), nation.get("name", "Unknown"), nation.get("id", "")]
+		identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		identity.add_theme_color_override("font_color", TEXT)
+		line.add_child(identity)
+		var economy := Label.new()
+		economy.text = "GDP %s   •   Growth %.1f%%   •   Inflation %.1f%%" % [_money(float(nation.get("gdp", 0.0))), float(nation.get("growth", 0.0)), float(nation.get("inflation", 0.0))]
+		economy.add_theme_color_override("font_color", MUTED)
+		line.add_child(economy)
+		var people := Label.new()
+		people.text = "Pop. %s   •   Stability %.0f" % [_format_number(int(nation.get("population", 0))), float(nation.get("stability", 0.0))]
+		people.add_theme_color_override("font_color", GREEN)
+		line.add_child(people)
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_budget() -> void:
 	current_screen = "budget"
