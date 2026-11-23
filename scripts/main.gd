@@ -30,6 +30,7 @@ func _on_viewport_resized() -> void:
 			"countries": _show_country_select()
 			"dashboard": _show_dashboard()
 			"budget": _show_budget()
+			"world": _show_world_nations()
 
 func _clear() -> void:
 	for child in get_children():
