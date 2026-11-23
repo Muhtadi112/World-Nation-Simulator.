@@ -36,6 +36,7 @@ func _on_viewport_resized() -> void:
 			"diplomacy_detail": _show_diplomacy_detail()
 			"military": _show_military()
 			"industry": _show_industry()
+			"trade": _show_trade()
 
 func _clear() -> void:
 	for child in get_children():
@@ -294,6 +295,7 @@ func _show_dashboard() -> void:
 	side.add_child(_section_label("DEVELOPMENT"))
 	side.add_child(_action_button("Infrastructure", "City construction coming in Phase 2"))
 	side.add_child(_button("Industry & trade", PANEL_ALT, _show_industry))
+	side.add_child(_button("International trade", PANEL_ALT, _show_trade))
 	side.add_child(_action_button("Research", "Technology tree coming in Phase 2"))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
@@ -336,6 +338,85 @@ func _show_world_nations() -> void:
 		people.text = "Pop. %s   •   Stability %.0f" % [_format_number(int(nation.get("population", 0))), float(nation.get("stability", 0.0))]
 		people.add_theme_color_override("font_color", GREEN)
 		line.add_child(people)
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+func _show_trade() -> void:
+	current_screen = "trade"
+	var body := _base("International trade", "Trade resources with nations that have an active diplomatic trade agreement.")
+	var summary := HBoxContainer.new()
+	summary.add_theme_constant_override("separation", 10)
+	body.add_child(summary)
+	summary.add_child(_stat_card("EXPORTS", _money(GameState.trade_exports), "CUMULATIVE VALUE"))
+	summary.add_child(_stat_card("IMPORTS", _money(GameState.trade_imports), "CUMULATIVE VALUE"))
+	summary.add_child(_stat_card("TRADE BALANCE", _money(GameState.trade_balance), "EXPORTS MINUS IMPORTS"))
+	var market := PanelContainer.new()
+	market.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(market)
+	var market_column := VBoxContainer.new()
+	market_column.add_theme_constant_override("separation", 7)
+	market.add_child(market_column)
+	market_column.add_child(_section_label("WORLD COMMODITY MARKET"))
+	for key in ["food", "energy", "metals", "goods"]:
+		market_column.add_child(_muted_label("%s  •  %s per unit  •  Stockpile: %s" % [str(key).capitalize(), _money(float(GameState.market_prices.get(key, 0.0))), _format_number(int(GameState.resource_stockpiles.get(key, 0.0)))]))
+	var policy := PanelContainer.new()
+	policy.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(policy)
+	var controls := VBoxContainer.new()
+	controls.add_theme_constant_override("separation", 8)
+	policy.add_child(controls)
+	controls.add_child(_section_label("TRADE POLICY"))
+	var tariff_label := _muted_label("Import tariff: %.1f%%" % (GameState.trade_tariff_rate * 100.0))
+	controls.add_child(tariff_label)
+	var tariff_slider := HSlider.new()
+	tariff_slider.min_value = 0
+	tariff_slider.max_value = 30
+	tariff_slider.step = 1
+	tariff_slider.value = GameState.trade_tariff_rate * 100.0
+	tariff_slider.value_changed.connect(func(value: float): tariff_label.text = "Import tariff: %.1f%%" % value)
+	controls.add_child(tariff_slider)
+	controls.add_child(_button("APPLY TARIFF", BLUE, func(): GameState.set_trade_tariff(tariff_slider.value / 100.0); _show_trade()))
+	var partner_picker := OptionButton.new()
+	var trade_partners: Array[Dictionary] = []
+	for nation in GameState.ai_countries:
+		var treaty: Dictionary = GameState.get_diplomacy(str(nation.get("id", "")))
+		if bool(treaty.get("trade_agreement", false)) and not bool(treaty.get("at_war", false)) and not bool(treaty.get("sanctions", false)):
+			partner_picker.add_item("%s %s" % [nation.get("flag", "🏳"), nation.get("name", "Unknown")])
+			trade_partners.append(nation)
+	if trade_partners.is_empty():
+		partner_picker.add_item("No active trade partners")
+	partner_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_child(_section_label("TRADE TRANSACTION"))
+	body.add_child(partner_picker)
+	var commodity_picker := OptionButton.new()
+	for key in ["food", "energy", "metals", "goods"]:
+		commodity_picker.add_item(str(key).capitalize())
+	body.add_child(commodity_picker)
+	var direction_picker := OptionButton.new()
+	direction_picker.add_item("Export to partner")
+	direction_picker.add_item("Import from partner")
+	body.add_child(direction_picker)
+	var units_input := SpinBox.new()
+	units_input.min_value = 1
+	units_input.max_value = 1000000
+	units_input.step = 100
+	units_input.value = 1000
+	units_input.prefix = "Units: "
+	body.add_child(units_input)
+	var execute := _button("EXECUTE TRADE", GREEN, func():
+		if trade_partners.is_empty():
+			_show_toast("No active trade agreement. Establish one in Diplomacy first.")
+			return
+		var partner: Dictionary = trade_partners[partner_picker.selected]
+		var commodity := ["food", "energy", "metals", "goods"][commodity_picker.selected]
+		var direction := "export" if direction_picker.selected == 0 else "import"
+		if GameState.trade_with_country(str(partner.get("id", "")), commodity, direction, units_input.value):
+			_show_trade()
+		else:
+			_show_toast("Trade failed: check agreement, stockpile, treasury or transaction size.")
+	)
+	body.add_child(execute)
+	body.add_child(_muted_label("Last transaction: %s" % GameState.last_trade_report))
+	body.add_child(_muted_label("Prices are simulated index values; tariffs apply to imports. AI counterparties settle against their simulated treasury. Trade is currently player-initiated, not autonomous AI market activity."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_industry() -> void:

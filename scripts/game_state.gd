@@ -24,6 +24,12 @@ var industrial_output: float = 0.0
 var industrial_jobs: int = 0
 var average_industrial_wage: float = 0.0
 var resource_stockpiles: Dictionary = {"food": 0.0, "energy": 0.0, "metals": 0.0, "goods": 0.0}
+var market_prices: Dictionary = {"food": 500.0, "energy": 1200.0, "metals": 2500.0, "goods": 4000.0}
+var trade_exports: float = 0.0
+var trade_imports: float = 0.0
+var trade_balance: float = 0.0
+var trade_tariff_rate: float = 0.05
+var last_trade_report: String = "No trade transactions yet."
 var game_date: Dictionary = {"year": 2026, "month": 1, "day": 1}
 var simulation_speed: int = 1
 var is_paused: bool = false
@@ -159,6 +165,7 @@ func _advance_day() -> void:
 	if month_changed:
 		_run_monthly_economy()
 		_run_monthly_industry()
+		_update_market_prices()
 		_run_ai_world_simulation()
 		_run_diplomacy_monthly_effects()
 	state_changed.emit()
@@ -237,6 +244,80 @@ func invest_in_factory() -> bool:
 	_update_budget_forecast()
 	state_changed.emit()
 	return true
+
+func trade_with_country(country_id: String, commodity: String, direction: String, units: float) -> bool:
+	if not diplomacy_relations.has(country_id) or not ["food", "energy", "metals", "goods"].has(commodity):
+		return false
+	var treaty: Dictionary = diplomacy_relations[country_id]
+	if not bool(treaty.get("trade_agreement", false)) or bool(treaty.get("at_war", false)) or bool(treaty.get("sanctions", false)):
+		return false
+	if units <= 0.0 or units > 1000000.0 or not ["export", "import"].has(direction):
+		return false
+	var nation := get_ai_country(country_id)
+	if nation.is_empty():
+		return false
+	var price := float(market_prices.get(commodity, 1000.0))
+	var total_value := price * units
+	if direction == "export":
+		var available := float(resource_stockpiles.get(commodity, 0.0))
+		if available < units:
+			return false
+		resource_stockpiles[commodity] = available - units
+		treasury += total_value
+		trade_exports += total_value
+	else:
+		var tariff := total_value * trade_tariff_rate
+		if treasury < total_value + tariff:
+			return false
+		treasury -= total_value + tariff
+		resource_stockpiles[commodity] = float(resource_stockpiles.get(commodity, 0.0)) + units
+		trade_imports += total_value
+		trade_balance -= total_value
+		trade_balance += 0.0
+		trade_exports = maxf(0.0, trade_exports)
+		treaty["last_import_tariff"] = tariff
+		diplomacy_relations[country_id] = treaty
+		trade_balance -= tariff
+	if direction == "export":
+		trade_balance += total_value
+	var partner_treasury := float(nation.get("treasury", 0.0))
+	if direction == "export":
+		partner_treasury = maxf(0.0, partner_treasury - total_value)
+	else:
+		partner_treasury += total_value
+	for index in range(ai_countries.size()):
+		if str(ai_countries[index].get("id", "")) == country_id:
+			var updated: Dictionary = ai_countries[index]
+			updated["treasury"] = partner_treasury
+			ai_countries[index] = updated
+			break
+	last_trade_report = "%s %s units of %s with %s for %s." % [direction.capitalize(), _format_trade_units(units), commodity, str(nation.get("name", country_id)), _format_trade_money(total_value)]
+	state_changed.emit()
+	return true
+
+func set_trade_tariff(new_rate: float) -> void:
+	trade_tariff_rate = clampf(new_rate, 0.0, 0.30)
+	state_changed.emit()
+
+func _format_trade_units(value: float) -> String:
+	return str(int(value)) if value < 1000.0 else "%.1fK" % (value / 1000.0)
+
+func _format_trade_money(value: float) -> String:
+	if value >= 1000000000.0:
+		return "$%.2fB" % (value / 1000000000.0)
+	if value >= 1000000.0:
+		return "$%.2fM" % (value / 1000000.0)
+	return "$%.0f" % value
+
+func _update_market_prices() -> void:
+	var keys := ["food", "energy", "metals", "goods"]
+	var demand_factors := {"food": float(population) * 0.03, "energy": gdp / 1000000000.0 * 2.0, "metals": gdp / 10000000000.0 * 3.0, "goods": gdp / 10000000000.0 * 2.0}
+	for key in keys:
+		var stock := float(resource_stockpiles.get(key, 0.0))
+		var target := maxf(float(demand_factors[key]), 1.0)
+		var scarcity := clampf((target - stock) / target, -0.5, 0.5)
+		var old_price := float(market_prices.get(key, 1000.0))
+		market_prices[key] = clampf(old_price * (1.0 + scarcity * 0.015), old_price * 0.90, old_price * 1.10)
 
 func _initialize_ai_countries() -> void:
 	ai_countries.clear()
@@ -485,6 +566,12 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	industrial_jobs = maxi(10000, int(float(population) * industrial_capacity * 0.22))
 	average_industrial_wage = industrial_output / maxf(float(industrial_jobs), 1.0)
 	resource_stockpiles = {"food": float(population) * 0.03, "energy": gdp / 1000000000.0 * 2.0, "metals": gdp / 10000000000.0 * 3.0, "goods": gdp / 10000000000.0 * 2.0}
+	market_prices = {"food": 500.0, "energy": 1200.0, "metals": 2500.0, "goods": 4000.0}
+	trade_exports = 0.0
+	trade_imports = 0.0
+	trade_balance = 0.0
+	trade_tariff_rate = 0.05
+	last_trade_report = "No trade transactions yet."
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
 	tanks = maxi(100, int(gdp / 1800000000.0))
 	aircraft = maxi(40, int(gdp / 5500000000.0))
@@ -513,7 +600,10 @@ func save_game() -> bool:
 		"defense_budget_rate": defense_budget_rate,
 		"factory_count": factory_count, "industrial_capacity": industrial_capacity,
 		"industrial_output": industrial_output, "industrial_jobs": industrial_jobs,
-		"average_industrial_wage": average_industrial_wage, "resource_stockpiles": resource_stockpiles
+		"average_industrial_wage": average_industrial_wage, "resource_stockpiles": resource_stockpiles,
+		"market_prices": market_prices, "trade_exports": trade_exports,
+		"trade_imports": trade_imports, "trade_balance": trade_balance,
+		"trade_tariff_rate": trade_tariff_rate, "last_trade_report": last_trade_report
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -570,6 +660,12 @@ func load_game() -> bool:
 	industrial_jobs = int(data.get("industrial_jobs", maxi(10000, int(float(population) * industrial_capacity * 0.22))))
 	average_industrial_wage = float(data.get("average_industrial_wage", industrial_output / maxf(float(industrial_jobs), 1.0)))
 	resource_stockpiles = data.get("resource_stockpiles", {"food": float(population) * 0.03, "energy": gdp / 1000000000.0 * 2.0, "metals": gdp / 10000000000.0 * 3.0, "goods": gdp / 10000000000.0 * 2.0})
+	market_prices = data.get("market_prices", {"food": 500.0, "energy": 1200.0, "metals": 2500.0, "goods": 4000.0})
+	trade_exports = float(data.get("trade_exports", 0.0))
+	trade_imports = float(data.get("trade_imports", 0.0))
+	trade_balance = float(data.get("trade_balance", trade_exports - trade_imports))
+	trade_tariff_rate = float(data.get("trade_tariff_rate", 0.05))
+	last_trade_report = str(data.get("last_trade_report", "No trade transactions yet."))
 	diplomacy_relations = data.get("diplomacy_relations", {})
 	if diplomacy_relations.is_empty():
 		_initialize_diplomacy()
