@@ -234,6 +234,7 @@ func _show_dashboard() -> void:
 	map.set_script(load("res://scripts/world_map.gd"))
 	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	map_column.add_child(map)
+	map.country_selected.connect(_on_map_country_selected)
 	var side := VBoxContainer.new()
 	side.custom_minimum_size.x = 250
 	side.add_theme_constant_override("separation", 8)
@@ -253,6 +254,10 @@ func _show_dashboard() -> void:
 	note.add_theme_font_size_override("font_size", 10)
 	body.add_child(note)
 	GameState.state_changed.connect(_refresh_dashboard, CONNECT_ONE_SHOT)
+
+func _on_map_country_selected(country: Dictionary) -> void:
+	selected_country = country.duplicate(true)
+	_show_toast("Selected: %s  •  %s" % [country.get("name", "Unknown"), country.get("id", "")])
 
 func _refresh_dashboard() -> void:
 	if current_screen == "dashboard":
