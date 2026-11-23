@@ -692,6 +692,83 @@ func _show_budget() -> void:
 	actions.add_child(_button("APPLY FISCAL POLICY", BLUE, func(): GameState.set_budget_policy(tax_slider.value / 100.0, spend_slider.value / 100.0); _show_budget()))
 	actions.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
+
+func _show_cities() -> void:
+	current_screen = "cities"
+	var country: Dictionary = GameState.selected_country
+	var body := _base("Cities & regional administration", "%s  /  %d catalogued cities • simulated regional districts" % [country.get("name", "Nation"), GameState.cities.size()])
+	var search := LineEdit.new()
+	search.placeholder_text = "Search city or region..."
+	search.custom_minimum_size.y = 42
+	body.add_child(search)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 7)
+	scroll.add_child(rows)
+	var detail := VBoxContainer.new()
+	detail.add_theme_constant_override("separation", 8)
+	body.add_child(detail)
+	var selected := GameState.get_city(GameState.selected_city_id)
+	if selected.is_empty() and not GameState.cities.is_empty():
+		selected = GameState.cities[0]
+		GameState.selected_city_id = str(selected.get("id", ""))
+	var refresh_detail := func() -> void:
+		for child in detail.get_children():
+			child.queue_free()
+		if selected.is_empty():
+			detail.add_child(_muted_label("No cities are available for this country in the offline catalogue."))
+			return
+		detail.add_child(_section_label("CITY PROFILE  /  " + str(selected.get("region", "Region"))))
+		var metrics := HBoxContainer.new()
+		metrics.add_theme_constant_override("separation", 8)
+		detail.add_child(metrics)
+		metrics.add_child(_stat_card("POPULATION", _format_number(int(selected.get("population", 0))), "CITY RESIDENTS"))
+		metrics.add_child(_stat_card("GDP", _money(float(selected.get("gdp", 0.0))), "MONTHLY MODEL BASE"))
+		metrics.add_child(_stat_card("QUALITY OF LIFE", "%.1f / 100" % float(selected.get("quality_of_life", 0.0)), "DEVELOPMENT INDEX"))
+		detail.add_child(_muted_label("Employment %.1f%%  •  Development %.1f / 100  •  Coordinates %.2f°, %.2f°" % [float(selected.get("employment", 0.0)), float(selected.get("development_index", 0.0)), float(selected.get("lat", 0.0)), float(selected.get("lon", 0.0))]))
+		var projects := HBoxContainer.new()
+		projects.add_theme_constant_override("separation", 7)
+		detail.add_child(projects)
+		for category in ["roads", "power", "housing", "health", "education"]:
+			var cost := GameState.city_upgrade_cost(str(selected.get("id", "")), category)
+			var project_button := _button("%s  L%d  •  %s" % [category.to_upper(), int(selected.get(category, 1)), _money(cost)], PANEL_ALT, func(kind: String = category):
+				if GameState.upgrade_city(str(selected.get("id", "")), kind):
+					_show_cities()
+				else:
+					_show_toast("Project unavailable: insufficient treasury or maximum level reached.")
+			)
+			project_button.custom_minimum_size.x = 145
+			projects.add_child(project_button)
+	search.text_changed.connect(func(query: String):
+		for child in rows.get_children():
+			child.queue_free()
+		for city in GameState.cities:
+			var haystack := (str(city.get("name", "")) + " " + str(city.get("region", ""))).to_lower()
+			if not query.strip_edges().is_empty() and not haystack.contains(query.to_lower()):
+				continue
+			var line := HBoxContainer.new()
+			line.add_theme_constant_override("separation", 10)
+			rows.add_child(line)
+			var label := Label.new()
+			label.text = "%s  •  %s  •  %s residents" % [city.get("name", "City"), city.get("region", "Region"), _format_number(int(city.get("population", 0)))]
+			label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			label.add_theme_color_override("font_color", TEXT)
+			line.add_child(label)
+			line.add_child(_button("OPEN", BLUE, func(id: String = str(city.get("id", ""))):
+				GameState.selected_city_id = id
+				selected = GameState.get_city(id)
+				refresh_detail.call()
+			))
+	)
+	search.text_changed.emit("")
+	refresh_detail.call()
+	body.add_child(_muted_label("Offline city catalogue currently covers selected major urban centres; population and GDP are allocated proportionally from the national baseline. Regional names are administrative labels, not a complete province-boundary dataset."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
 func _on_map_country_selected(country: Dictionary) -> void:
 	var full_country := GameState.find_country(str(country.get("id", "")))
 	if full_country.is_empty():

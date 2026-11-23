@@ -1,0 +1,652 @@
+[
+  {
+    "id": "IDN_JAKARTA",
+    "country": "IDN",
+    "name": "Jakarta",
+    "region": "DKI Jakarta",
+    "population": 10600000,
+    "lat": -6.2,
+    "lon": 106.8,
+    "tier": 1
+  },
+  {
+    "id": "IDN_SURABAYA",
+    "country": "IDN",
+    "name": "Surabaya",
+    "region": "East Java",
+    "population": 2900000,
+    "lat": -7.25,
+    "lon": 112.75,
+    "tier": 2
+  },
+  {
+    "id": "IDN_BANDUNG",
+    "country": "IDN",
+    "name": "Bandung",
+    "region": "West Java",
+    "population": 2500000,
+    "lat": -6.91,
+    "lon": 107.61,
+    "tier": 2
+  },
+  {
+    "id": "IDN_MEDAN",
+    "country": "IDN",
+    "name": "Medan",
+    "region": "North Sumatra",
+    "population": 2400000,
+    "lat": 3.59,
+    "lon": 98.67,
+    "tier": 2
+  },
+  {
+    "id": "IDN_SEMARANG",
+    "country": "IDN",
+    "name": "Semarang",
+    "region": "Central Java",
+    "population": 1650000,
+    "lat": -6.97,
+    "lon": 110.42,
+    "tier": 2
+  },
+  {
+    "id": "IDN_MAKASSAR",
+    "country": "IDN",
+    "name": "Makassar",
+    "region": "South Sulawesi",
+    "population": 1450000,
+    "lat": -5.14,
+    "lon": 119.41,
+    "tier": 2
+  },
+  {
+    "id": "IDN_PALEMBANG",
+    "country": "IDN",
+    "name": "Palembang",
+    "region": "South Sumatra",
+    "population": 1700000,
+    "lat": -2.99,
+    "lon": 104.76,
+    "tier": 2
+  },
+  {
+    "id": "IDN_DENPASAR",
+    "country": "IDN",
+    "name": "Denpasar",
+    "region": "Bali",
+    "population": 725000,
+    "lat": -8.65,
+    "lon": 115.22,
+    "tier": 3
+  },
+  {
+    "id": "USA_NEW_YORK",
+    "country": "USA",
+    "name": "New York",
+    "region": "New York",
+    "population": 8800000,
+    "lat": 40.71,
+    "lon": -74,
+    "tier": 1
+  },
+  {
+    "id": "USA_LOS_ANGELES",
+    "country": "USA",
+    "name": "Los Angeles",
+    "region": "California",
+    "population": 3900000,
+    "lat": 34.05,
+    "lon": -118.24,
+    "tier": 1
+  },
+  {
+    "id": "USA_CHICAGO",
+    "country": "USA",
+    "name": "Chicago",
+    "region": "Illinois",
+    "population": 2700000,
+    "lat": 41.88,
+    "lon": -87.63,
+    "tier": 2
+  },
+  {
+    "id": "USA_HOUSTON",
+    "country": "USA",
+    "name": "Houston",
+    "region": "Texas",
+    "population": 2300000,
+    "lat": 29.76,
+    "lon": -95.37,
+    "tier": 2
+  },
+  {
+    "id": "USA_PHOENIX",
+    "country": "USA",
+    "name": "Phoenix",
+    "region": "Arizona",
+    "population": 1600000,
+    "lat": 33.45,
+    "lon": -112.07,
+    "tier": 2
+  },
+  {
+    "id": "USA_WASHINGTON_D_C_",
+    "country": "USA",
+    "name": "Washington, D.C.",
+    "region": "District of Columbia",
+    "population": 700000,
+    "lat": 38.9,
+    "lon": -77.04,
+    "tier": 2
+  },
+  {
+    "id": "CHN_SHANGHAI",
+    "country": "CHN",
+    "name": "Shanghai",
+    "region": "Shanghai",
+    "population": 24800000,
+    "lat": 31.23,
+    "lon": 121.47,
+    "tier": 1
+  },
+  {
+    "id": "CHN_BEIJING",
+    "country": "CHN",
+    "name": "Beijing",
+    "region": "Beijing",
+    "population": 21800000,
+    "lat": 39.9,
+    "lon": 116.4,
+    "tier": 1
+  },
+  {
+    "id": "CHN_SHENZHEN",
+    "country": "CHN",
+    "name": "Shenzhen",
+    "region": "Guangdong",
+    "population": 17500000,
+    "lat": 22.54,
+    "lon": 114.06,
+    "tier": 1
+  },
+  {
+    "id": "CHN_GUANGZHOU",
+    "country": "CHN",
+    "name": "Guangzhou",
+    "region": "Guangdong",
+    "population": 15000000,
+    "lat": 23.13,
+    "lon": 113.26,
+    "tier": 2
+  },
+  {
+    "id": "CHN_CHENGDU",
+    "country": "CHN",
+    "name": "Chengdu",
+    "region": "Sichuan",
+    "population": 16000000,
+    "lat": 30.57,
+    "lon": 104.06,
+    "tier": 2
+  },
+  {
+    "id": "IND_MUMBAI",
+    "country": "IND",
+    "name": "Mumbai",
+    "region": "Maharashtra",
+    "population": 12400000,
+    "lat": 19.08,
+    "lon": 72.88,
+    "tier": 1
+  },
+  {
+    "id": "IND_DELHI",
+    "country": "IND",
+    "name": "Delhi",
+    "region": "Delhi",
+    "population": 11000000,
+    "lat": 28.61,
+    "lon": 77.21,
+    "tier": 1
+  },
+  {
+    "id": "IND_BENGALURU",
+    "country": "IND",
+    "name": "Bengaluru",
+    "region": "Karnataka",
+    "population": 8400000,
+    "lat": 12.97,
+    "lon": 77.59,
+    "tier": 2
+  },
+  {
+    "id": "IND_CHENNAI",
+    "country": "IND",
+    "name": "Chennai",
+    "region": "Tamil Nadu",
+    "population": 7100000,
+    "lat": 13.08,
+    "lon": 80.27,
+    "tier": 2
+  },
+  {
+    "id": "IND_KOLKATA",
+    "country": "IND",
+    "name": "Kolkata",
+    "region": "West Bengal",
+    "population": 4500000,
+    "lat": 22.57,
+    "lon": 88.36,
+    "tier": 2
+  },
+  {
+    "id": "JPN_TOKYO",
+    "country": "JPN",
+    "name": "Tokyo",
+    "region": "Tokyo",
+    "population": 14000000,
+    "lat": 35.68,
+    "lon": 139.69,
+    "tier": 1
+  },
+  {
+    "id": "JPN_OSAKA",
+    "country": "JPN",
+    "name": "Osaka",
+    "region": "Osaka",
+    "population": 2750000,
+    "lat": 34.69,
+    "lon": 135.5,
+    "tier": 2
+  },
+  {
+    "id": "JPN_YOKOHAMA",
+    "country": "JPN",
+    "name": "Yokohama",
+    "region": "Kanagawa",
+    "population": 3770000,
+    "lat": 35.44,
+    "lon": 139.64,
+    "tier": 2
+  },
+  {
+    "id": "JPN_NAGOYA",
+    "country": "JPN",
+    "name": "Nagoya",
+    "region": "Aichi",
+    "population": 2300000,
+    "lat": 35.18,
+    "lon": 136.91,
+    "tier": 2
+  },
+  {
+    "id": "GBR_LONDON",
+    "country": "GBR",
+    "name": "London",
+    "region": "Greater London",
+    "population": 8900000,
+    "lat": 51.51,
+    "lon": -0.13,
+    "tier": 1
+  },
+  {
+    "id": "GBR_MANCHESTER",
+    "country": "GBR",
+    "name": "Manchester",
+    "region": "Greater Manchester",
+    "population": 550000,
+    "lat": 53.48,
+    "lon": -2.24,
+    "tier": 2
+  },
+  {
+    "id": "GBR_BIRMINGHAM",
+    "country": "GBR",
+    "name": "Birmingham",
+    "region": "West Midlands",
+    "population": 1150000,
+    "lat": 52.49,
+    "lon": -1.9,
+    "tier": 2
+  },
+  {
+    "id": "FRA_PARIS",
+    "country": "FRA",
+    "name": "Paris",
+    "region": "Île-de-France",
+    "population": 2100000,
+    "lat": 48.86,
+    "lon": 2.35,
+    "tier": 1
+  },
+  {
+    "id": "FRA_MARSEILLE",
+    "country": "FRA",
+    "name": "Marseille",
+    "region": "Provence-Alpes-Côte d'Azur",
+    "population": 870000,
+    "lat": 43.3,
+    "lon": 5.37,
+    "tier": 2
+  },
+  {
+    "id": "DEU_BERLIN",
+    "country": "DEU",
+    "name": "Berlin",
+    "region": "Berlin",
+    "population": 3700000,
+    "lat": 52.52,
+    "lon": 13.4,
+    "tier": 1
+  },
+  {
+    "id": "DEU_MUNICH",
+    "country": "DEU",
+    "name": "Munich",
+    "region": "Bavaria",
+    "population": 1500000,
+    "lat": 48.14,
+    "lon": 11.58,
+    "tier": 2
+  },
+  {
+    "id": "DEU_HAMBURG",
+    "country": "DEU",
+    "name": "Hamburg",
+    "region": "Hamburg",
+    "population": 1850000,
+    "lat": 53.55,
+    "lon": 9.99,
+    "tier": 2
+  },
+  {
+    "id": "BRA_S_O_PAULO",
+    "country": "BRA",
+    "name": "São Paulo",
+    "region": "São Paulo",
+    "population": 12300000,
+    "lat": -23.55,
+    "lon": -46.63,
+    "tier": 1
+  },
+  {
+    "id": "BRA_RIO_DE_JANEIRO",
+    "country": "BRA",
+    "name": "Rio de Janeiro",
+    "region": "Rio de Janeiro",
+    "population": 6700000,
+    "lat": -22.91,
+    "lon": -43.2,
+    "tier": 2
+  },
+  {
+    "id": "BRA_BRAS_LIA",
+    "country": "BRA",
+    "name": "Brasília",
+    "region": "Federal District",
+    "population": 3100000,
+    "lat": -15.79,
+    "lon": -47.88,
+    "tier": 2
+  },
+  {
+    "id": "RUS_MOSCOW",
+    "country": "RUS",
+    "name": "Moscow",
+    "region": "Moscow",
+    "population": 12600000,
+    "lat": 55.75,
+    "lon": 37.62,
+    "tier": 1
+  },
+  {
+    "id": "RUS_SAINT_PETERSBURG",
+    "country": "RUS",
+    "name": "Saint Petersburg",
+    "region": "Northwestern Federal District",
+    "population": 5400000,
+    "lat": 59.93,
+    "lon": 30.33,
+    "tier": 2
+  },
+  {
+    "id": "KOR_SEOUL",
+    "country": "KOR",
+    "name": "Seoul",
+    "region": "Seoul",
+    "population": 9500000,
+    "lat": 37.57,
+    "lon": 126.98,
+    "tier": 1
+  },
+  {
+    "id": "KOR_BUSAN",
+    "country": "KOR",
+    "name": "Busan",
+    "region": "Busan",
+    "population": 3300000,
+    "lat": 35.18,
+    "lon": 129.08,
+    "tier": 2
+  },
+  {
+    "id": "AUS_SYDNEY",
+    "country": "AUS",
+    "name": "Sydney",
+    "region": "New South Wales",
+    "population": 5300000,
+    "lat": -33.87,
+    "lon": 151.21,
+    "tier": 1
+  },
+  {
+    "id": "AUS_MELBOURNE",
+    "country": "AUS",
+    "name": "Melbourne",
+    "region": "Victoria",
+    "population": 5000000,
+    "lat": -37.81,
+    "lon": 144.96,
+    "tier": 1
+  },
+  {
+    "id": "AUS_BRISBANE",
+    "country": "AUS",
+    "name": "Brisbane",
+    "region": "Queensland",
+    "population": 2500000,
+    "lat": -27.47,
+    "lon": 153.03,
+    "tier": 2
+  },
+  {
+    "id": "CAN_TORONTO",
+    "country": "CAN",
+    "name": "Toronto",
+    "region": "Ontario",
+    "population": 2800000,
+    "lat": 43.65,
+    "lon": -79.38,
+    "tier": 1
+  },
+  {
+    "id": "CAN_VANCOUVER",
+    "country": "CAN",
+    "name": "Vancouver",
+    "region": "British Columbia",
+    "population": 675000,
+    "lat": 49.28,
+    "lon": -123.12,
+    "tier": 2
+  },
+  {
+    "id": "MEX_MEXICO_CITY",
+    "country": "MEX",
+    "name": "Mexico City",
+    "region": "Mexico City",
+    "population": 9200000,
+    "lat": 19.43,
+    "lon": -99.13,
+    "tier": 1
+  },
+  {
+    "id": "ITA_ROME",
+    "country": "ITA",
+    "name": "Rome",
+    "region": "Lazio",
+    "population": 2800000,
+    "lat": 41.9,
+    "lon": 12.5,
+    "tier": 1
+  },
+  {
+    "id": "ESP_MADRID",
+    "country": "ESP",
+    "name": "Madrid",
+    "region": "Community of Madrid",
+    "population": 3300000,
+    "lat": 40.42,
+    "lon": -3.7,
+    "tier": 1
+  },
+  {
+    "id": "NLD_AMSTERDAM",
+    "country": "NLD",
+    "name": "Amsterdam",
+    "region": "North Holland",
+    "population": 920000,
+    "lat": 52.37,
+    "lon": 4.9,
+    "tier": 2
+  },
+  {
+    "id": "TUR_ISTANBUL",
+    "country": "TUR",
+    "name": "Istanbul",
+    "region": "Istanbul",
+    "population": 15500000,
+    "lat": 41.01,
+    "lon": 28.97,
+    "tier": 1
+  },
+  {
+    "id": "SAU_RIYADH",
+    "country": "SAU",
+    "name": "Riyadh",
+    "region": "Riyadh Province",
+    "population": 7600000,
+    "lat": 24.71,
+    "lon": 46.67,
+    "tier": 2
+  },
+  {
+    "id": "ARE_DUBAI",
+    "country": "ARE",
+    "name": "Dubai",
+    "region": "Dubai",
+    "population": 3500000,
+    "lat": 25.2,
+    "lon": 55.27,
+    "tier": 2
+  },
+  {
+    "id": "SGP_SINGAPORE",
+    "country": "SGP",
+    "name": "Singapore",
+    "region": "Central Region",
+    "population": 5900000,
+    "lat": 1.35,
+    "lon": 103.82,
+    "tier": 1
+  },
+  {
+    "id": "THA_BANGKOK",
+    "country": "THA",
+    "name": "Bangkok",
+    "region": "Bangkok",
+    "population": 10500000,
+    "lat": 13.75,
+    "lon": 100.5,
+    "tier": 1
+  },
+  {
+    "id": "MYS_KUALA_LUMPUR",
+    "country": "MYS",
+    "name": "Kuala Lumpur",
+    "region": "Federal Territory",
+    "population": 2000000,
+    "lat": 3.14,
+    "lon": 101.69,
+    "tier": 2
+  },
+  {
+    "id": "PHL_MANILA",
+    "country": "PHL",
+    "name": "Manila",
+    "region": "Metro Manila",
+    "population": 1850000,
+    "lat": 14.6,
+    "lon": 120.98,
+    "tier": 1
+  },
+  {
+    "id": "EGY_CAIRO",
+    "country": "EGY",
+    "name": "Cairo",
+    "region": "Cairo Governorate",
+    "population": 10000000,
+    "lat": 30.04,
+    "lon": 31.24,
+    "tier": 1
+  },
+  {
+    "id": "ZAF_JOHANNESBURG",
+    "country": "ZAF",
+    "name": "Johannesburg",
+    "region": "Gauteng",
+    "population": 5600000,
+    "lat": -26.2,
+    "lon": 28.04,
+    "tier": 2
+  },
+  {
+    "id": "NGA_LAGOS",
+    "country": "NGA",
+    "name": "Lagos",
+    "region": "Lagos State",
+    "population": 15000000,
+    "lat": 6.52,
+    "lon": 3.38,
+    "tier": 1
+  },
+  {
+    "id": "ARG_BUENOS_AIRES",
+    "country": "ARG",
+    "name": "Buenos Aires",
+    "region": "Buenos Aires",
+    "population": 3100000,
+    "lat": -34.6,
+    "lon": -58.38,
+    "tier": 1
+  },
+  {
+    "id": "CHL_SANTIAGO",
+    "country": "CHL",
+    "name": "Santiago",
+    "region": "Santiago Metropolitan",
+    "population": 5600000,
+    "lat": -33.45,
+    "lon": -70.67,
+    "tier": 2
+  },
+  {
+    "id": "KEN_NAIROBI",
+    "country": "KEN",
+    "name": "Nairobi",
+    "region": "Nairobi County",
+    "population": 4400000,
+    "lat": -1.29,
+    "lon": 36.82,
+    "tier": 2
+  }
+]

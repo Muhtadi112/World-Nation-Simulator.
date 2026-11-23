@@ -6,6 +6,116 @@ const SAVE_DIR := "user://saves"
 const SAVE_PATH := "user://saves/autosave.json"
 const COUNTRY_DATA_PATH := "res://data/countries_110m.json"
 
+
+const CITY_DATA_PATH := "res://data/major_cities.json"
+var cities: Array[Dictionary] = []
+var selected_city_id: String = ""
+var infrastructure: Dictionary = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
+var city_catalog: Array[Dictionary] = []
+
+func load_city_catalog() -> void:
+	city_catalog.clear()
+	if not FileAccess.file_exists(CITY_DATA_PATH):
+		push_warning("Major city catalogue is missing; capital-only fallback will be used.")
+		return
+	var file := FileAccess.open(CITY_DATA_PATH, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if typeof(parsed) == TYPE_ARRAY:
+		for row in parsed:
+			if typeof(row) == TYPE_DICTIONARY:
+				city_catalog.append(row)
+
+func _initialize_cities(country: Dictionary) -> void:
+	if city_catalog.is_empty():
+		load_city_catalog()
+	cities.clear()
+	var country_id := str(country.get("id", ""))
+	var matching: Array[Dictionary] = []
+	var total_catalog_population := 0.0
+	for entry in city_catalog:
+		if str(entry.get("country", "")) == country_id:
+			matching.append(entry)
+			total_catalog_population += float(entry.get("population", 0))
+	if matching.is_empty():
+		var capital_name := str(country.get("capital", "Capital"))
+		matching.append({"id": country_id + "_CAPITAL", "name": capital_name, "region": str(country.get("region", "National Capital District")), "population": maxf(float(population) * 0.12, 10000.0), "lat": 0.0, "lon": 0.0, "tier": 1})
+		total_catalog_population = float(matching[0].get("population", 10000))
+	var national_population := maxf(float(country.get("population", population)), 1.0)
+	var national_gdp := maxf(float(country.get("gdp", gdp)), 1.0)
+	for entry in matching:
+		var source_population := maxf(float(entry.get("population", 10000)), 1.0)
+		var share := source_population / maxf(total_catalog_population, 1.0)
+		var city_population := maxi(10000, int(national_population * share))
+		var city_gdp := national_gdp * share
+		cities.append({
+			"id": str(entry.get("id", country_id + "_CITY")),
+			"name": str(entry.get("name", "Unnamed City")),
+			"country": country_id,
+			"region": str(entry.get("region", "Unassigned Region")),
+			"population": city_population,
+			"gdp": city_gdp,
+			"development": int(entry.get("tier", 3)),
+			"development_index": 25.0 + float(entry.get("tier", 3)) * 12.0,
+			"employment": 94.0,
+			"quality_of_life": 58.0 + float(entry.get("tier", 3)) * 2.0,
+			"lat": float(entry.get("lat", 0.0)),
+			"lon": float(entry.get("lon", 0.0)),
+			"roads": 2, "power": 2, "housing": 2, "health": 1, "education": 1
+		})
+	if not cities.is_empty():
+		selected_city_id = str(cities[0].get("id", ""))
+
+func get_city(city_id: String) -> Dictionary:
+	for city in cities:
+		if str(city.get("id", "")) == city_id:
+			return city.duplicate(true)
+	return {}
+
+func city_upgrade_cost(city_id: String, category: String) -> float:
+	var city := get_city(city_id)
+	if city.is_empty() or not [ "roads", "power", "housing", "health", "education" ].has(category):
+		return -1.0
+	var level := int(city.get(category, 1))
+	return maxf(float(city.get("gdp", 0.0)) * (0.00008 + float(level) * 0.000025), 5000000.0)
+
+func upgrade_city(city_id: String, category: String) -> bool:
+	var cost := city_upgrade_cost(city_id, category)
+	if cost < 0.0 or treasury < cost:
+		return false
+	for index in range(cities.size()):
+		if str(cities[index].get("id", "")) == city_id:
+			var level := int(cities[index].get(category, 1))
+			if level >= 30:
+				return false
+			treasury -= cost
+			cities[index][category] = level + 1
+			cities[index]["development_index"] = minf(100.0, float(cities[index].get("development_index", 25.0)) + 1.8)
+			cities[index]["quality_of_life"] = minf(100.0, float(cities[index].get("quality_of_life", 50.0)) + 0.6)
+			selected_city_id = city_id
+			state_changed.emit()
+			return true
+	return false
+
+func _run_monthly_city_simulation() -> void:
+	for index in range(cities.size()):
+		var city: Dictionary = cities[index]
+		var roads := float(city.get("roads", 1))
+		var education := float(city.get("education", 1))
+		var health := float(city.get("health", 1))
+		var housing := float(city.get("housing", 1))
+		var infrastructure_score := (roads + education + health + housing + float(city.get("power", 1))) / 150.0
+		var growth := clampf(0.00045 + infrastructure_score * 0.00035, 0.0002, 0.0012)
+		city["population"] = maxi(10000, int(float(city.get("population", 10000)) * (1.0 + growth)))
+		city["gdp"] = float(city.get("gdp", 0.0)) * (1.0 + annual_gdp_growth / 1200.0 + infrastructure_score * 0.001)
+		city["employment"] = clampf(float(city.get("employment", 94.0)) + 0.015 + education * 0.001, 70.0, 99.5)
+		city["development_index"] = minf(100.0, float(city.get("development_index", 25.0)) + infrastructure_score * 0.035)
+		city["quality_of_life"] = clampf(float(city.get("quality_of_life", 58.0)) + (health + housing) * 0.004 - maxf(inflation - 4.0, 0.0) * 0.01, 10.0, 100.0)
+		cities[index] = city
+
+
 var game_mode: String = "Career"
 var selected_country: Dictionary = {}
 var country_catalog: Array[Dictionary] = []
