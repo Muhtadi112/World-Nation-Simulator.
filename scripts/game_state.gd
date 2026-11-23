@@ -165,6 +165,7 @@ func _advance_day() -> void:
 	if month_changed:
 		_run_monthly_economy()
 		_run_monthly_industry()
+		_run_monthly_infrastructure()
 		_update_market_prices()
 		_run_ai_world_simulation()
 		_run_diplomacy_monthly_effects()
@@ -186,11 +187,13 @@ func _run_monthly_economy() -> void:
 		treasury -= debt_payment
 		debt -= debt_payment
 	var monthly_growth := (annual_gdp_growth / 100.0) / 12.0
-	var investment_effect := (spending_rate - 0.12) * 0.004
+	var infrastructure_effect := (float(infrastructure.get("roads", 0)) + float(infrastructure.get("power", 0)) + float(infrastructure.get("ports", 0)) + float(infrastructure.get("airports", 0))) * 0.000012
+	var investment_effect := (spending_rate - 0.12) * 0.004 + infrastructure_effect
 	var stability_effect := (stability - 50.0) * 0.000015
 	var inflation_effect := maxf(0.0, inflation - 5.0) * 0.00008
 	gdp *= 1.0 + monthly_growth + investment_effect + stability_effect - inflation_effect
-	var annual_population_growth := 0.008 + (stability - 50.0) * 0.00004 - maxf(0.0, unemployment - 8.0) * 0.0001
+	var social_infrastructure := float(infrastructure.get("hospitals", 0)) + float(infrastructure.get("schools", 0)) + float(infrastructure.get("housing", 0))
+	var annual_population_growth := 0.008 + (stability - 50.0) * 0.00004 + social_infrastructure * 0.000008 - maxf(0.0, unemployment - 8.0) * 0.0001
 	population = maxi(1, int(float(population) * (1.0 + annual_population_growth / 12.0)))
 	military_readiness = clampf(military_readiness + (defense_budget_rate - 0.04) * 5.0 - 0.5, 20.0, 100.0)
 	var demand_pressure := (spending_rate - tax_rate) * 0.08
@@ -575,6 +578,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	trade_balance = 0.0
 	trade_tariff_rate = 0.05
 	last_trade_report = "No trade transactions yet."
+	infrastructure = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
 	tanks = maxi(100, int(gdp / 1800000000.0))
 	aircraft = maxi(40, int(gdp / 5500000000.0))
@@ -606,7 +610,8 @@ func save_game() -> bool:
 		"average_industrial_wage": average_industrial_wage, "resource_stockpiles": resource_stockpiles,
 		"market_prices": market_prices, "trade_exports": trade_exports,
 		"trade_imports": trade_imports, "trade_balance": trade_balance,
-		"trade_tariff_rate": trade_tariff_rate, "last_trade_report": last_trade_report
+		"trade_tariff_rate": trade_tariff_rate, "last_trade_report": last_trade_report,
+		"infrastructure": infrastructure
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -669,6 +674,7 @@ func load_game() -> bool:
 	trade_balance = float(data.get("trade_balance", trade_exports - trade_imports))
 	trade_tariff_rate = float(data.get("trade_tariff_rate", 0.05))
 	last_trade_report = str(data.get("last_trade_report", "No trade transactions yet."))
+	infrastructure = data.get("infrastructure", {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12})
 	diplomacy_relations = data.get("diplomacy_relations", {})
 	if diplomacy_relations.is_empty():
 		_initialize_diplomacy()

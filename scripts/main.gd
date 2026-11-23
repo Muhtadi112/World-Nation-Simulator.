@@ -37,6 +37,7 @@ func _on_viewport_resized() -> void:
 			"military": _show_military()
 			"industry": _show_industry()
 			"trade": _show_trade()
+			"infrastructure": _show_infrastructure()
 
 func _clear() -> void:
 	for child in get_children():
@@ -293,7 +294,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Diplomacy & foreign affairs", PANEL_ALT, _show_diplomacy))
 	side.add_child(_button("Military & defense", PANEL_ALT, _show_military))
 	side.add_child(_section_label("DEVELOPMENT"))
-	side.add_child(_action_button("Infrastructure", "City construction coming in Phase 2"))
+	side.add_child(_button("Infrastructure & cities", PANEL_ALT, _show_infrastructure))
 	side.add_child(_button("Industry & trade", PANEL_ALT, _show_industry))
 	side.add_child(_button("International trade", PANEL_ALT, _show_trade))
 	side.add_child(_action_button("Research", "Technology tree coming in Phase 2"))
