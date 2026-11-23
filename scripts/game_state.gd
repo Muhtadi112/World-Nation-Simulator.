@@ -18,6 +18,12 @@ var naval_vessels: int = 180
 var military_readiness: float = 68.0
 var defense_budget_rate: float = 0.035
 var monthly_defense_cost: float = 0.0
+var factory_count: int = 0
+var industrial_capacity: float = 0.0
+var industrial_output: float = 0.0
+var industrial_jobs: int = 0
+var average_industrial_wage: float = 0.0
+var resource_stockpiles: Dictionary = {"food": 0.0, "energy": 0.0, "metals": 0.0, "goods": 0.0}
 var game_date: Dictionary = {"year": 2026, "month": 1, "day": 1}
 var simulation_speed: int = 1
 var is_paused: bool = false
@@ -152,6 +158,7 @@ func _advance_day() -> void:
 			game_date["year"] += 1
 	if month_changed:
 		_run_monthly_economy()
+		_run_monthly_industry()
 		_run_ai_world_simulation()
 		_run_diplomacy_monthly_effects()
 	state_changed.emit()
@@ -184,6 +191,52 @@ func _run_monthly_economy() -> void:
 	unemployment = clampf(unemployment - (annual_gdp_growth - 2.0) * 0.015 + (inflation - 6.0) * 0.008, 1.0, 35.0)
 	stability = clampf(stability + (monthly_balance / maxf(gdp / 12.0, 1.0)) * 1.5 - maxf(0.0, inflation - 8.0) * 0.08, 0.0, 100.0)
 	annual_gdp_growth = clampf(annual_gdp_growth + (stability - 60.0) * 0.001 - maxf(0.0, inflation - 5.0) * 0.01, -15.0, 20.0)
+
+func _run_monthly_industry() -> void:
+	if gdp <= 0.0:
+		return
+	var capacity_ratio := clampf(industrial_capacity, 0.01, 0.35)
+	var food := float(resource_stockpiles.get("food", 0.0))
+	var energy := float(resource_stockpiles.get("energy", 0.0))
+	var metals := float(resource_stockpiles.get("metals", 0.0))
+	var goods := float(resource_stockpiles.get("goods", 0.0))
+	var food_production := float(population) * 0.0011
+	var food_consumption := float(population) * 0.001
+	var energy_production := maxf(1.0, gdp / 1000000000.0 * (0.8 + capacity_ratio * 2.0))
+	var energy_consumption := maxf(1.0, gdp / 1000000000.0 * (0.75 + capacity_ratio * 2.8))
+	var metals_production := maxf(0.5, gdp / 10000000000.0 * 0.65)
+	var metals_consumption := maxf(0.5, gdp / 10000000000.0 * capacity_ratio * 9.0)
+	var goods_production := maxf(0.5, gdp / 10000000000.0 * capacity_ratio * 7.0)
+	var goods_consumption := maxf(0.5, gdp / 10000000000.0 * 0.45)
+	food = maxf(0.0, food + food_production - food_consumption)
+	energy = maxf(0.0, energy + energy_production - energy_consumption)
+	metals = maxf(0.0, metals + metals_production - metals_consumption)
+	goods = maxf(0.0, goods + goods_production - goods_consumption)
+	var energy_factor := 1.0 if energy > 0.0 else 0.55
+	var metals_factor := 1.0 if metals > 0.0 else 0.65
+	var goods_factor := 1.0 if goods > 0.0 else 0.75
+	var production_efficiency := (energy_factor + metals_factor + goods_factor) / 3.0
+	industrial_output = gdp * capacity_ratio * 0.01 * production_efficiency
+	industrial_jobs = maxi(0, int(float(population) * minf(0.035, capacity_ratio * 0.22)))
+	average_industrial_wage = industrial_output / maxf(float(industrial_jobs), 1.0)
+	resource_stockpiles = {"food": food, "energy": energy, "metals": metals, "goods": goods}
+	var industry_growth_bonus := (industrial_output / maxf(gdp, 1.0)) * 0.12
+	annual_gdp_growth = clampf(annual_gdp_growth + industry_growth_bonus, -15.0, 20.0)
+	var employment_effect := minf(0.08, float(industrial_jobs) / maxf(float(population), 1.0))
+	unemployment = clampf(unemployment - employment_effect * 0.08, 1.0, 35.0)
+
+func invest_in_factory() -> bool:
+	var cost := maxf(gdp * 0.002, 100000000.0)
+	if treasury < cost or factory_count >= 500:
+		return false
+	treasury -= cost
+	factory_count += 1
+	industrial_capacity = minf(0.35, industrial_capacity + 0.012)
+	industrial_jobs += maxi(1000, int(float(population) * 0.00002))
+	average_industrial_wage = maxf(average_industrial_wage, cost * 0.00002)
+	_update_budget_forecast()
+	state_changed.emit()
+	return true
 
 func _initialize_ai_countries() -> void:
 	ai_countries.clear()
@@ -426,6 +479,12 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	annual_gdp_growth = 3.2
 	stability = 72.0
 	_initialize_ai_countries()
+	factory_count = maxi(1, int(float(population) / 25000000.0))
+	industrial_capacity = 0.06 + minf(0.18, float(factory_count) * 0.0015)
+	industrial_output = gdp * industrial_capacity * 0.01
+	industrial_jobs = maxi(10000, int(float(population) * industrial_capacity * 0.22))
+	average_industrial_wage = industrial_output / maxf(float(industrial_jobs), 1.0)
+	resource_stockpiles = {"food": float(population) * 0.03, "energy": gdp / 1000000000.0 * 2.0, "metals": gdp / 10000000000.0 * 3.0, "goods": gdp / 10000000000.0 * 2.0}
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
 	tanks = maxi(100, int(gdp / 1800000000.0))
 	aircraft = maxi(40, int(gdp / 5500000000.0))
@@ -451,7 +510,10 @@ func save_game() -> bool:
 		"stability": stability, "ai_countries": ai_countries, "diplomacy_relations": diplomacy_relations,
 		"military_personnel": military_personnel, "tanks": tanks, "aircraft": aircraft,
 		"naval_vessels": naval_vessels, "military_readiness": military_readiness,
-		"defense_budget_rate": defense_budget_rate
+		"defense_budget_rate": defense_budget_rate,
+		"factory_count": factory_count, "industrial_capacity": industrial_capacity,
+		"industrial_output": industrial_output, "industrial_jobs": industrial_jobs,
+		"average_industrial_wage": average_industrial_wage, "resource_stockpiles": resource_stockpiles
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -502,6 +564,12 @@ func load_game() -> bool:
 	military_readiness = float(data.get("military_readiness", 68.0))
 	defense_budget_rate = float(data.get("defense_budget_rate", 0.035))
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
+	factory_count = int(data.get("factory_count", maxi(1, int(float(population) / 25000000.0))))
+	industrial_capacity = float(data.get("industrial_capacity", 0.08))
+	industrial_output = float(data.get("industrial_output", gdp * industrial_capacity * 0.01))
+	industrial_jobs = int(data.get("industrial_jobs", maxi(10000, int(float(population) * industrial_capacity * 0.22))))
+	average_industrial_wage = float(data.get("average_industrial_wage", industrial_output / maxf(float(industrial_jobs), 1.0)))
+	resource_stockpiles = data.get("resource_stockpiles", {"food": float(population) * 0.03, "energy": gdp / 1000000000.0 * 2.0, "metals": gdp / 10000000000.0 * 3.0, "goods": gdp / 10000000000.0 * 2.0})
 	diplomacy_relations = data.get("diplomacy_relations", {})
 	if diplomacy_relations.is_empty():
 		_initialize_diplomacy()

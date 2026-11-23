@@ -35,6 +35,7 @@ func _on_viewport_resized() -> void:
 			"diplomacy": _show_diplomacy()
 			"diplomacy_detail": _show_diplomacy_detail()
 			"military": _show_military()
+			"industry": _show_industry()
 
 func _clear() -> void:
 	for child in get_children():
@@ -292,7 +293,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Military & defense", PANEL_ALT, _show_military))
 	side.add_child(_section_label("DEVELOPMENT"))
 	side.add_child(_action_button("Infrastructure", "City construction coming in Phase 2"))
-	side.add_child(_action_button("Industry & trade", "Business simulation coming in Phase 2"))
+	side.add_child(_button("Industry & trade", PANEL_ALT, _show_industry))
 	side.add_child(_action_button("Research", "Technology tree coming in Phase 2"))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
@@ -335,6 +336,45 @@ func _show_world_nations() -> void:
 		people.text = "Pop. %s   •   Stability %.0f" % [_format_number(int(nation.get("population", 0))), float(nation.get("stability", 0.0))]
 		people.add_theme_color_override("font_color", GREEN)
 		line.add_child(people)
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+func _show_industry() -> void:
+	current_screen = "industry"
+	var body := _base("Industry & resources", "National production, industrial capacity, employment and strategic stockpiles.")
+	var stats := HBoxContainer.new()
+	stats.add_theme_constant_override("separation", 10)
+	body.add_child(stats)
+	stats.add_child(_stat_card("FACTORIES", _format_number(GameState.factory_count), "INDUSTRIAL FACILITIES"))
+	stats.add_child(_stat_card("INDUSTRIAL OUTPUT", _money(GameState.industrial_output), "MONTHLY VALUE ADDED"))
+	stats.add_child(_stat_card("INDUSTRIAL JOBS", _format_number(GameState.industrial_jobs), "ESTIMATED WORKFORCE"))
+	var capacity_panel := PanelContainer.new()
+	capacity_panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(capacity_panel)
+	var capacity_column := VBoxContainer.new()
+	capacity_column.add_theme_constant_override("separation", 8)
+	capacity_panel.add_child(capacity_column)
+	capacity_column.add_child(_section_label("INDUSTRIAL CAPACITY"))
+	capacity_column.add_child(_muted_label("Capacity: %.1f%% of national GDP base" % (GameState.industrial_capacity * 100.0)))
+	capacity_column.add_child(_muted_label("Average monthly output per industrial worker: %s" % _money(GameState.average_industrial_wage)))
+	capacity_column.add_child(_muted_label("Factories consume energy and metals; output is reduced when strategic inputs run out."))
+	var resources := PanelContainer.new()
+	resources.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(resources)
+	var resource_column := VBoxContainer.new()
+	resource_column.add_theme_constant_override("separation", 8)
+	resources.add_child(resource_column)
+	resource_column.add_child(_section_label("NATIONAL RESOURCE STOCKPILES"))
+	for key in ["food", "energy", "metals", "goods"]:
+		resource_column.add_child(_muted_label("%s: %s units" % [str(key).capitalize(), _format_number(int(GameState.resource_stockpiles.get(key, 0.0)))]))
+	resource_column.add_child(_muted_label("Stockpiles are abstract simulation units, not real-world tonnes."))
+	var investment_cost := maxf(GameState.gdp * 0.002, 100000000.0)
+	body.add_child(_button("BUILD FACTORY  •  %s" % _money(investment_cost), GREEN, func():
+		if GameState.invest_in_factory():
+			_show_industry()
+		else:
+			_show_toast("Factory investment unavailable: insufficient treasury or factory limit reached.")
+	))
+	body.add_child(_muted_label("Each factory increases capacity by 1.2 percentage points, creates jobs and costs 0.2% of GDP (minimum $100M)."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_military() -> void:
