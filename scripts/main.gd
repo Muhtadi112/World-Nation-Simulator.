@@ -234,7 +234,7 @@ func _show_dashboard() -> void:
 	map.set_script(load("res://scripts/world_map.gd"))
 	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	map_column.add_child(map)
-	map.country_selected.connect(_on_map_country_selected)
+	map.connect("country_selected", Callable(self, "_on_map_country_selected"))
 	var side := VBoxContainer.new()
 	side.custom_minimum_size.x = 250
 	side.add_theme_constant_override("separation", 8)
