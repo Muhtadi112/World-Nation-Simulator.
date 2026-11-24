@@ -21,6 +21,11 @@ var country_search_text: String = ""
 var country_results: VBoxContainer
 var selected_diplomacy_id: String = ""
 var _startup_complete := false
+var dashboard_date_label: Label
+
+func _process(_delta: float) -> void:
+	if is_instance_valid(dashboard_date_label) and current_screen == "dashboard":
+		dashboard_date_label.text = "📅  %s  •  %s" % [GameState.formatted_date(), "KARIER" if GameState.game_mode == "Career" else "SANDBOX"]
 
 func _ready() -> void:
 	RenderingServer.set_default_clear_color(BG)
@@ -60,6 +65,7 @@ func _on_viewport_resized() -> void:
 			"home": _show_home()
 			"countries": _show_country_select()
 			"dashboard": _show_dashboard()
+			"systems": _show_all_systems()
 			"map_country": _show_map_country_profile()
 			"budget": _show_budget()
 			"world": _show_world_nations()
@@ -90,6 +96,7 @@ func _clear() -> void:
 		child.queue_free()
 	content = null
 	toast_label = null
+	dashboard_date_label = null
 
 func _base(title: String, subtitle: String) -> VBoxContainer:
 	_clear()
@@ -355,6 +362,7 @@ func _show_dashboard() -> void:
 	date.text = "📅  %s  •  %s" % [GameState.formatted_date(), "KARIER" if GameState.game_mode == "Career" else "SANDBOX"]
 	date.add_theme_color_override("font_color", CYAN)
 	date.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dashboard_date_label = date
 	date_row.add_child(date)
 	date_row.add_child(_button("Ⅱ JEDA" if not GameState.is_paused else "▶ LANJUT", PANEL_ALT, _toggle_pause))
 	var speed_row := HFlowContainer.new()
@@ -490,7 +498,6 @@ func _show_dashboard() -> void:
 		emergency_col.add_child(_button("KERAHKAN PASUKAN", Color("#76513a"), func(): GameState.resolve_emergency_response("mobilize"); _show_dashboard()))
 		
 	body.add_child(_muted_label("Simulasi berjalan offline. Satu hari permainan berlalu setiap 3 detik pada kecepatan 1x."))
-	GameState.state_changed.connect(_refresh_dashboard, CONNECT_ONE_SHOT)
 
 func _show_all_systems() -> void:
 	current_screen = "systems"
