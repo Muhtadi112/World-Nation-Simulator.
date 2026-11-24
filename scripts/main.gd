@@ -2522,11 +2522,7 @@ func _id_text(value: String) -> String:
 		"ANNUAL": "TAHUNAN",
 		"OFFLINE": "LURING",
 		"World nations": "Negara-negara dunia",
-		"International trade": "Perdagangan internasional",
-		"National budget": "Anggaran negara",
-		"Choose your nation": "Pilih negaramu",
 		"Search country or ISO code...": "Cari negara atau kode ISO...",
-		"COUNTRY DATABASE": "DATABASE NEGARA",
 		"NATIONS / AREAS": "NEGARA / WILAYAH",
 		"Capital": "Ibu kota",
 		"Population": "Populasi",
@@ -2538,9 +2534,6 @@ func _id_text(value: String) -> String:
 		"Some capitals and currencies are not yet catalogued.": "Sebagian data ibu kota dan mata uang belum tersedia.",
 		"Country database could not be loaded.": "Database negara gagal dimuat.",
 		"No matching country found.": "Negara tidak ditemukan.",
-		"START SIMULATION": "MULAI SIMULASI",
-		"BACK": "KEMBALI",
-		"OFFLINE": "LURING",
 		"National Overview": "Ringkasan Nasional",
 		"Annual": "Tahunan",
 		"Monthly": "Bulanan",
@@ -2559,9 +2552,6 @@ func _id_text(value: String) -> String:
 		"History": "Riwayat",
 		"Available": "Tersedia",
 		"Locked": "Terkunci",
-		"Population:": "Populasi:",
-		"Capital:": "Ibu kota:",
-		"Currency:": "Mata uang:"
 	}
 	var screen_translations := {
 		"World nations": "Negara-negara dunia",
