@@ -316,6 +316,29 @@ func _show_dashboard() -> void:
 	body.add_child(objective_grid)
 	for objective in GameState.get_national_objectives():
 		objective_grid.add_child(_objective_card(objective))
+	if not GameState.active_emergency.is_empty():
+		var emergency_panel := PanelContainer.new()
+		emergency_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		emergency_panel.add_theme_stylebox_override("panel", _style(Color("#321d22"), Color("#e05b64"), 2, 12))
+		body.add_child(emergency_panel)
+		var emergency_column := VBoxContainer.new()
+		emergency_column.add_theme_constant_override("separation", 7)
+		emergency_panel.add_child(emergency_column)
+		var emergency_title := Label.new()
+		emergency_title.text = "⚠  NATIONAL EMERGENCY  /  %s" % str(GameState.active_emergency.get("type", "Disaster")).to_upper()
+		emergency_title.add_theme_color_override("font_color", Color("#ff8b91"))
+		emergency_title.add_theme_font_size_override("font_size", 14)
+		emergency_column.add_child(emergency_title)
+		var emergency_detail := Label.new()
+		emergency_detail.text = "Severity %.0f/100  •  Estimated damage %s. Choose how your government responds." % [float(GameState.active_emergency.get("severity", 0.0)), _money(float(GameState.active_emergency.get("damage", 0.0)))]
+		emergency_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		emergency_detail.add_theme_color_override("font_color", TEXT)
+		emergency_column.add_child(emergency_detail)
+		var relief_cost := maxf(15000000.0, GameState.gdp * 0.0035)
+		var mobilize_cost := maxf(8000000.0, GameState.gdp * 0.0018)
+		emergency_column.add_child(_button("FUND EMERGENCY RELIEF  •  %s" % _money(relief_cost), Color("#9b3f48"), func(): GameState.resolve_emergency_response("relief"); _show_dashboard()))
+		emergency_column.add_child(_button("MOBILIZE NATIONAL FORCES  •  %s" % _money(mobilize_cost), Color("#76513a"), func(): GameState.resolve_emergency_response("mobilize"); _show_dashboard()))
+		emergency_column.add_child(_button("DELAY RESPONSE  •  SAVE TREASURY", PANEL_ALT, func(): GameState.resolve_emergency_response("defer"); _show_dashboard()))
 	var main_row := VBoxContainer.new()
 	main_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_row.add_theme_constant_override("separation", 12)

@@ -70,6 +70,7 @@ var disaster_resilience: float = 42.0
 var disaster_cooldown: int = 0
 var disaster_history: Array[Dictionary] = []
 var last_disaster_report: String = "No major natural disasters recorded."
+var active_emergency: Dictionary = {}
 
 var research_budget_rate: float = 0.015
 var research_labs: int = 1
@@ -1973,6 +1974,7 @@ func _initialize_environment() -> void:
 	disaster_resilience = clampf(28.0 + float(infrastructure.get("roads", 12)) * 0.7 + float(infrastructure.get("hospitals", 8)) * 1.1 + float(infrastructure.get("housing", 12)) * 0.55, 15.0, 85.0)
 	disaster_cooldown = 0
 	disaster_history.clear()
+	active_emergency.clear()
 	last_disaster_report = "No major natural disasters recorded."
 	_update_budget_forecast()
 
@@ -2077,7 +2079,51 @@ func _trigger_natural_disaster(seed_value: int, year: int, month: int) -> void:
 		disaster_history.pop_back()
 	disaster_cooldown = 5
 	environmental_quality = maxf(0.0, environmental_quality - severity * 0.025)
+	active_emergency = {
+		"type": disaster, "severity": severity, "damage": economic_damage,
+		"year": year, "month": month, "resolved": false
+	}
+	last_disaster_report = "%s. Emergency response required." % report
 	state_changed.emit()
+
+func resolve_emergency_response(response_id: String) -> bool:
+	if active_emergency.is_empty():
+		return false
+	match response_id:
+		"relief":
+			var cost := maxf(15000000.0, gdp * 0.0035)
+			if treasury < cost:
+				last_disaster_report = "Emergency relief rejected: insufficient treasury funds."
+				state_changed.emit()
+				return false
+			treasury -= cost
+			stability = minf(100.0, stability + 4.0)
+			government_approval = minf(100.0, government_approval + 3.5)
+			poverty_rate = maxf(0.0, poverty_rate - 0.35)
+			last_disaster_report = "Emergency relief funded. Recovery teams and supplies are reaching affected communities."
+		"mobilize":
+			var cost := maxf(8000000.0, gdp * 0.0018)
+			if treasury < cost:
+				last_disaster_report = "National mobilization rejected: insufficient treasury funds."
+				state_changed.emit()
+				return false
+			treasury -= cost
+			stability = minf(100.0, stability + 2.5)
+			government_approval = minf(100.0, government_approval + 2.0)
+			military_readiness = maxf(0.0, military_readiness - 1.5)
+			for key in ["roads", "power", "housing"]:
+				infrastructure[key] = mini(100, int(infrastructure.get(key, 1)) + 1)
+			last_disaster_report = "National forces mobilized. Critical infrastructure repairs have begun."
+		"defer":
+			stability = maxf(0.0, stability - 2.0)
+			government_approval = maxf(0.0, government_approval - 3.0)
+			last_disaster_report = "The government delayed major intervention. Treasury preserved, but public confidence has fallen."
+		_:
+			return false
+	active_emergency.clear()
+	_update_budget_forecast()
+	state_changed.emit()
+	return true
 
 func _environment_money(value: float) -> String:
 	if value >= 1000000000000.0:
@@ -3057,7 +3103,7 @@ func save_game() -> bool:
 		"forest_cover": forest_cover, "climate_risk": climate_risk, "biodiversity": biodiversity,
 		"environmental_quality": environmental_quality, "renewable_energy_share": renewable_energy_share,
 		"disaster_resilience": disaster_resilience, "disaster_cooldown": disaster_cooldown,
-		"disaster_history": disaster_history, "last_disaster_report": last_disaster_report,
+		"disaster_history": disaster_history, "last_disaster_report": last_disaster_report, "active_emergency": active_emergency,
 		"power_plants": power_plants, "energy_fuel_reserves": energy_fuel_reserves,
 		"grid_capacity": grid_capacity, "energy_demand": energy_demand, "energy_generation": energy_generation,
 		"energy_supply_ratio": energy_supply_ratio, "energy_price": energy_price, "blackout_risk": blackout_risk,
@@ -3313,6 +3359,7 @@ func load_game() -> bool:
 		if typeof(disaster_data) == TYPE_DICTIONARY:
 			disaster_history.append(disaster_data)
 	last_disaster_report = str(data.get("last_disaster_report", "No major natural disasters recorded."))
+	active_emergency = data.get("active_emergency", {})
 	power_plants.clear()
 	for plant_data in data.get("power_plants", []):
 		if typeof(plant_data) == TYPE_DICTIONARY:
