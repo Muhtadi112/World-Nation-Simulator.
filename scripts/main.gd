@@ -47,7 +47,8 @@ func _on_viewport_resized() -> void:
 			"environment": _show_environment(),
 			"energy": _show_energy(),
 			"mining": _show_mining(),
-			"space": _show_space()
+			"space": _show_space(),
+			"intelligence": _show_intelligence()
 
 func _clear() -> void:
 	for child in get_children():
@@ -317,6 +318,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Energy & power grid", PANEL_ALT, _show_energy))
 	side.add_child(_button("Mining & natural resources", PANEL_ALT, _show_mining))
 	side.add_child(_button("Space agency & exploration", PANEL_ALT, _show_space))
+	side.add_child(_button("Intelligence & cyber security", PANEL_ALT, _show_intelligence))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
@@ -833,6 +835,88 @@ func _show_transport() -> void:
 
 
 
+
+
+func _show_intelligence() -> void:
+	current_screen = "intelligence"
+	var body := _base("Intelligence & cyber security", "NATIONAL INTELLIGENCE  /  COUNTERINTELLIGENCE  /  CYBER DEFENSE")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("AGENCY", "LEVEL %d" % GameState.intelligence_agency_level, "INTELLIGENCE CAPACITY"))
+	summary.add_child(_stat_card("CYBER DEFENSE", "%.1f / 100" % GameState.cyber_defense_rating, "NATIONAL SECURITY"))
+	summary.add_child(_stat_card("COUNTERINTELLIGENCE", "%.1f / 100" % GameState.counterintelligence_rating, "THREAT DETECTION"))
+	summary.add_child(_stat_card("INTELLIGENCE POINTS", "%.0f" % GameState.intelligence_points, "STRATEGIC KNOWLEDGE"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("NATIONAL SECURITY STATUS"))
+	sections.add_child(_muted_label("Threat level %.1f / 100  •  Monthly intelligence cost %s  •  %s" % [GameState.national_threat_level, _money(GameState.monthly_intelligence_cost), GameState.intelligence_report]))
+	var funding := HSlider.new()
+	funding.min_value = 0.1
+	funding.max_value = 3.0
+	funding.step = 0.1
+	funding.value = GameState.intelligence_budget_rate * 100.0
+	sections.add_child(funding)
+	var funding_label := _muted_label("Intelligence budget: %.1f%% GDP" % funding.value)
+	sections.add_child(funding_label)
+	funding.value_changed.connect(func(value: float): funding_label.text = "Intelligence budget: %.1f%% GDP" % value)
+	sections.add_child(_button("APPLY INTELLIGENCE BUDGET", BLUE, func():
+		GameState.set_intelligence_budget(funding.value / 100.0)
+		_show_intelligence()
+	))
+	sections.add_child(_button("UPGRADE INTELLIGENCE AGENCY  •  %s" % _money(GameState.intelligence_agency_upgrade_cost()), GREEN, func():
+		if GameState.upgrade_intelligence_agency():
+			_show_intelligence()
+		else:
+			_show_toast("Upgrade unavailable: check funds or agency level cap.")
+	))
+	sections.add_child(_button("UPGRADE CYBER DEFENSE", BLUE, func():
+		if GameState.upgrade_cyber_defense():
+			_show_intelligence()
+		else:
+			_show_toast("Cyber defense upgrade unavailable or insufficient funds.")
+	))
+	sections.add_child(_section_label("INTELLIGENCE OPERATIONS"))
+	if not GameState.active_intelligence_operation.is_empty():
+		var active: Dictionary = GameState.active_intelligence_operation
+		sections.add_child(_muted_label("%s  •  Target: %s  •  Progress: %d / %d months" % [active.get("name", "Operation"), active.get("target_name", "Unknown"), int(active.get("progress", 0)), int(active.get("duration", 2))]))
+	else:
+		var nation_picker := OptionButton.new()
+		for nation in GameState.ai_countries:
+			nation_picker.add_item("%s  (%s)" % [str(nation.get("name", "Nation")), str(nation.get("id", ""))])
+			nation_picker.set_item_metadata(nation_picker.item_count - 1, str(nation.get("id", "")))
+		sections.add_child(nation_picker)
+		var operation_picker := OptionButton.new()
+		operation_picker.add_item("Foreign intelligence gathering")
+		operation_picker.add_item("Technology intelligence operation")
+		operation_picker.add_item("Strategic cyber disruption (hostile / wartime only)")
+		sections.add_child(operation_picker)
+		sections.add_child(_button("LAUNCH OPERATION", GREEN, func():
+			if nation_picker.item_count == 0:
+				_show_toast("No target nations available.")
+				return
+			var target_id := str(nation_picker.get_item_metadata(nation_picker.selected))
+			var operation_ids := ["foreign_intel", "technology_espionage", "cyber_disruption"]
+			if GameState.launch_intelligence_operation(target_id, operation_ids[operation_picker.selected]):
+				_show_intelligence()
+			else:
+				_show_toast("Operation rejected: check target, treasury, diplomatic posture or active operation.")
+		))
+	sections.add_child(_section_label("OPERATION HISTORY"))
+	if GameState.intelligence_operation_log.is_empty():
+		sections.add_child(_muted_label("No completed intelligence operations."))
+	else:
+		for entry in GameState.intelligence_operation_log:
+			sections.add_child(_muted_label("%s  •  %s  •  %s  •  %s" % [entry.get("date", ""), entry.get("name", "Operation"), entry.get("target", "Target"), entry.get("status", "")]))
+	sections.add_child(_muted_label("Fictional abstract strategy-game mechanics. Outcomes are gameplay probabilities, not real operational guidance or threat intelligence."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_space() -> void:
 	current_screen = "space"

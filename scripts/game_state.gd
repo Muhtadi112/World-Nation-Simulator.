@@ -71,6 +71,16 @@ var monthly_space_cost: float = 0.0
 var active_space_mission: Dictionary = {}
 var space_mission_log: Array[Dictionary] = []
 var space_report: String = "No national space missions have been launched."
+var intelligence_agency_level: int = 1
+var intelligence_budget_rate: float = 0.006
+var intelligence_points: float = 0.0
+var cyber_defense_rating: float = 35.0
+var counterintelligence_rating: float = 30.0
+var national_threat_level: float = 20.0
+var monthly_intelligence_cost: float = 0.0
+var active_intelligence_operation: Dictionary = {}
+var intelligence_operation_log: Array[Dictionary] = []
+var intelligence_report: String = "No intelligence operations have been conducted."
 
 var government_type: String = "Constitutional democracy"
 var government_approval: float = 58.0
@@ -961,6 +971,7 @@ func _advance_day() -> void:
 		_run_monthly_social_simulation()
 		_run_monthly_research()
 		_run_monthly_space_program()
+		_run_monthly_intelligence()
 		_run_monthly_environment()
 		_update_government_monthly()
 		_run_monthly_city_simulation()
@@ -2222,11 +2233,153 @@ func _run_monthly_space_program() -> void:
 			active_space_mission.clear()
 	_update_budget_forecast()
 
+
+func intelligence_agency_upgrade_cost() -> float:
+	if intelligence_agency_level >= 5:
+		return -1.0
+	return maxf(gdp * (0.0012 + float(intelligence_agency_level) * 0.0008), 35000000.0)
+
+func upgrade_intelligence_agency() -> bool:
+	var cost := intelligence_agency_upgrade_cost()
+	if cost < 0.0 or treasury < cost:
+		return false
+	treasury -= cost
+	intelligence_agency_level += 1
+	intelligence_points += 18.0
+	intelligence_report = "Intelligence agency upgraded to level %d." % intelligence_agency_level
+	state_changed.emit()
+	return true
+
+func set_intelligence_budget(value: float) -> void:
+	intelligence_budget_rate = clampf(value, 0.001, 0.03)
+	_update_budget_forecast()
+	state_changed.emit()
+
+func upgrade_cyber_defense() -> bool:
+	var cost := maxf(gdp * (0.0008 + cyber_defense_rating / 100000.0), 25000000.0)
+	if treasury < cost or cyber_defense_rating >= 95.0:
+		return false
+	treasury -= cost
+	cyber_defense_rating = minf(100.0, cyber_defense_rating + 8.0)
+	counterintelligence_rating = minf(100.0, counterintelligence_rating + 2.0)
+	intelligence_report = "National cyber defense improved. Current rating: %.1f." % cyber_defense_rating
+	state_changed.emit()
+	return true
+
+func launch_intelligence_operation(target_id: String, operation_id: String) -> bool:
+	if not active_intelligence_operation.is_empty() or target_id == str(selected_country.get("id", "")):
+		return false
+	var target_index := -1
+	for index in range(ai_countries.size()):
+		if str(ai_countries[index].get("id", "")) == target_id:
+			target_index = index
+			break
+	if target_index < 0:
+		return false
+	var operation_cost := 0.0
+	var duration := 2
+	var operation_name := ""
+	match operation_id:
+		"foreign_intel":
+			operation_cost = maxf(gdp * 0.00012, 2500000.0)
+			duration = 2
+			operation_name = "Foreign intelligence gathering"
+		"technology_espionage":
+			operation_cost = maxf(gdp * 0.00035, 8000000.0)
+			duration = 3
+			operation_name = "Technology intelligence operation"
+			if completed_technologies.size() >= technology_tree.size():
+				return false
+		"cyber_disruption":
+			operation_cost = maxf(gdp * 0.00055, 15000000.0)
+			duration = 3
+			operation_name = "Strategic cyber disruption"
+			var relation: Dictionary = get_diplomacy(target_id)
+			if float(relation.get("relation", 0.0)) > -10.0 and not bool(relation.get("at_war", false)):
+				return false
+		_:
+			return false
+	if treasury < operation_cost:
+		return false
+	treasury -= operation_cost
+	active_intelligence_operation = {
+		"id": operation_id, "name": operation_name, "target_id": target_id,
+		"target_name": str(ai_countries[target_index].get("name", target_id)),
+		"duration": duration, "progress": 0, "cost": operation_cost
+	}
+	intelligence_report = "Operation launched: %s against %s." % [operation_name, str(ai_countries[target_index].get("name", target_id))]
+	state_changed.emit()
+	return true
+
+func _run_monthly_intelligence() -> void:
+	monthly_intelligence_cost = gdp * intelligence_budget_rate / 12.0
+	intelligence_points += float(intelligence_agency_level) * (0.8 + intelligence_budget_rate * 35.0)
+	national_threat_level = clampf(national_threat_level + (35.0 - cyber_defense_rating) * 0.008 - counterintelligence_rating * 0.001, 0.0, 100.0)
+	if active_intelligence_operation.is_empty():
+		_update_budget_forecast()
+		return
+	active_intelligence_operation["progress"] = int(active_intelligence_operation.get("progress", 0)) + 1
+	if int(active_intelligence_operation.get("progress", 0)) < int(active_intelligence_operation.get("duration", 2)):
+		_update_budget_forecast()
+		return
+	var target_id := str(active_intelligence_operation.get("target_id", ""))
+	var target_index := -1
+	for index in range(ai_countries.size()):
+		if str(ai_countries[index].get("id", "")) == target_id:
+			target_index = index
+			break
+	if target_index < 0:
+		intelligence_report = "Operation aborted: target nation is no longer available."
+		active_intelligence_operation.clear()
+		_update_budget_forecast()
+		return
+	var target: Dictionary = ai_countries[target_index]
+	var target_defense := float(target.get("cyber_defense", 25.0))
+	var target_counter := float(target.get("counterintelligence", 25.0))
+	var operation_id := str(active_intelligence_operation.get("id", ""))
+	var detection_chance := clampf(0.12 + target_defense * 0.004 + target_counter * 0.002 - float(intelligence_agency_level) * 0.025 - cyber_defense_rating * 0.001, 0.05, 0.75)
+	var seed_value := absi(target_id.hash() + int(game_date.get("year", 2026)) * 31 + int(game_date.get("month", 1)) * 17 + intelligence_operation_log.size() * 13)
+	var roll := float(seed_value % 1000) / 1000.0
+	var detected := roll < detection_chance
+	var outcome := "SUCCESS"
+	if detected:
+		outcome = "DETECTED"
+		var relations: Dictionary = get_diplomacy(target_id)
+		relations["relation"] = maxf(-100.0, float(relations.get("relation", 0.0)) - 18.0)
+		diplomacy_relations[target_id] = relations
+		target["cyber_defense"] = minf(100.0, target_defense + 5.0)
+		ai_countries[target_index] = target
+		stability = maxf(0.0, stability - 1.0)
+		intelligence_report = "Operation detected by %s. Diplomatic relations deteriorated." % str(target.get("name", target_id))
+	else:
+		match operation_id:
+			"foreign_intel":
+				intelligence_points += 35.0
+				intelligence_report = "Intelligence report acquired: %s — GDP %s, population %s, stability %.1f." % [str(target.get("name", target_id)), _environment_money(float(target.get("gdp", 0.0))), str(int(target.get("population", 0))), float(target.get("stability", 50.0))]
+			"technology_espionage":
+				var stolen_points := minf(65.0, 25.0 + float(intelligence_agency_level) * 8.0)
+				research_points += stolen_points
+				intelligence_report = "Technology intelligence successful against %s. Research gained: %.0f points." % [str(target.get("name", target_id)), stolen_points]
+			"cyber_disruption":
+				target["gdp"] = maxf(1000000.0, float(target.get("gdp", 0.0)) * 0.992)
+				target["stability"] = maxf(0.0, float(target.get("stability", 50.0)) - 2.5)
+				ai_countries[target_index] = target
+				var relations: Dictionary = get_diplomacy(target_id)
+				relations["relation"] = maxf(-100.0, float(relations.get("relation", 0.0)) - 8.0)
+				diplomacy_relations[target_id] = relations
+				intelligence_report = "Cyber operation disrupted %s economic systems. Diplomatic exposure remains possible." % str(target.get("name", target_id))
+	intelligence_operation_log.append({"name": str(active_intelligence_operation.get("name", operation_id)), "target": str(target.get("name", target_id)), "date": formatted_date(), "status": outcome})
+	while intelligence_operation_log.size() > 20:
+		intelligence_operation_log.pop_front()
+	active_intelligence_operation.clear()
+	_update_budget_forecast()
+	state_changed.emit()
+
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0 + maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
 	monthly_environment_cost = maxf(0.0, gdp) * environment_budget_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate + intelligence_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost + monthly_intelligence_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -2300,6 +2453,16 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	active_space_mission.clear()
 	space_mission_log.clear()
 	space_report = "No national space missions have been launched."
+	intelligence_agency_level = 1
+	intelligence_budget_rate = 0.006
+	intelligence_points = 0.0
+	cyber_defense_rating = 30.0 + minf(25.0, float(population) / 10000000.0)
+	counterintelligence_rating = 30.0
+	national_threat_level = 20.0
+	monthly_intelligence_cost = 0.0
+	active_intelligence_operation.clear()
+	intelligence_operation_log.clear()
+	intelligence_report = "National intelligence and cyber security institutions established."
 	_initialize_environment()
 	_initialize_energy()
 	_initialize_mining()
@@ -2353,6 +2516,11 @@ func save_game() -> bool:
 		"operational_satellites": operational_satellites, "space_program_budget_rate": space_program_budget_rate,
 		"monthly_space_cost": monthly_space_cost, "active_space_mission": active_space_mission,
 		"space_mission_log": space_mission_log, "space_report": space_report,
+		"intelligence_agency_level": intelligence_agency_level, "intelligence_budget_rate": intelligence_budget_rate,
+		"intelligence_points": intelligence_points, "cyber_defense_rating": cyber_defense_rating,
+		"counterintelligence_rating": counterintelligence_rating, "national_threat_level": national_threat_level,
+		"monthly_intelligence_cost": monthly_intelligence_cost, "active_intelligence_operation": active_intelligence_operation,
+		"intelligence_operation_log": intelligence_operation_log, "intelligence_report": intelligence_report,
 		"environment_budget_rate": environment_budget_rate, "monthly_environment_cost": monthly_environment_cost,
 		"carbon_emissions": carbon_emissions, "air_pollution": air_pollution, "water_pollution": water_pollution,
 		"forest_cover": forest_cover, "climate_risk": climate_risk, "biodiversity": biodiversity,
@@ -2518,6 +2686,19 @@ func load_game() -> bool:
 		if typeof(mission_data) == TYPE_DICTIONARY:
 			space_mission_log.append(mission_data)
 	space_report = str(data.get("space_report", "No national space missions have been launched."))
+	intelligence_agency_level = int(data.get("intelligence_agency_level", 1))
+	intelligence_budget_rate = float(data.get("intelligence_budget_rate", 0.006))
+	intelligence_points = float(data.get("intelligence_points", 0.0))
+	cyber_defense_rating = float(data.get("cyber_defense_rating", 30.0))
+	counterintelligence_rating = float(data.get("counterintelligence_rating", 30.0))
+	national_threat_level = float(data.get("national_threat_level", 20.0))
+	monthly_intelligence_cost = float(data.get("monthly_intelligence_cost", 0.0))
+	active_intelligence_operation = data.get("active_intelligence_operation", {})
+	intelligence_operation_log.clear()
+	for operation_data in data.get("intelligence_operation_log", []):
+		if typeof(operation_data) == TYPE_DICTIONARY:
+			intelligence_operation_log.append(operation_data)
+	intelligence_report = str(data.get("intelligence_report", "No intelligence operations have been conducted."))
 	environment_budget_rate = float(data.get("environment_budget_rate", 0.012))
 	monthly_environment_cost = float(data.get("monthly_environment_cost", 0.0))
 	carbon_emissions = float(data.get("carbon_emissions", maxf(1.0, float(population) / 1000000.0 * 0.42)))
