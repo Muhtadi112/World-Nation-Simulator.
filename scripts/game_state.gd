@@ -40,6 +40,17 @@ var monthly_welfare_cost: float = 0.0
 var social_mobility: float = 50.0
 var infrastructure: Dictionary = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 var city_catalog: Array[Dictionary] = []
+var government_type: String = "Constitutional democracy"
+var government_approval: float = 58.0
+var governing_party_id: String = ""
+var coalition_party_ids: Array[String] = []
+var parliament_seats: int = 300
+var months_until_election: int = 48
+var political_parties: Array[Dictionary] = []
+var cabinet: Array[Dictionary] = []
+var enacted_laws: Array[String] = []
+var last_election_report: String = "No election has been held yet."
+
 
 func load_city_catalog() -> void:
 	city_catalog.clear()
@@ -890,6 +901,7 @@ func _advance_day() -> void:
 		_run_monthly_company_simulation()
 		_run_monthly_banking_simulation()
 		_run_monthly_social_simulation()
+		_update_government_monthly()
 		_run_monthly_city_simulation()
 		_update_market_prices()
 		_run_ai_world_simulation()
@@ -1264,6 +1276,179 @@ func _run_diplomacy_monthly_effects() -> void:
 	if active_wars > 0:
 		stability = maxf(0.0, stability - 0.25 * float(active_wars))
 
+func _initialize_government() -> void:
+	government_type = "Constitutional democracy"
+	government_approval = 58.0
+	parliament_seats = 300
+	months_until_election = 48
+	political_parties = [
+		{"id": "national_union", "name": "National Union", "ideology": "Centre-right", "leader": "A. Rahman", "popularity": 38.0, "seats": 114, "government": true},
+		{"id": "social_progress", "name": "Social Progress Party", "ideology": "Centre-left", "leader": "M. Pratama", "popularity": 29.0, "seats": 87, "government": false},
+		{"id": "green_future", "name": "Green Future", "ideology": "Green / liberal", "leader": "S. Wijaya", "popularity": 19.0, "seats": 57, "government": false},
+		{"id": "people_voice", "name": "People's Voice", "ideology": "Populist", "leader": "D. Santoso", "popularity": 14.0, "seats": 42, "government": false}
+	]
+	governing_party_id = "national_union"
+	coalition_party_ids = ["national_union", "green_future"]
+	cabinet.clear()
+	var ministries := [
+		["Finance", "Ministry of Finance"],
+		["Defense", "Ministry of Defense"],
+		["Foreign Affairs", "Ministry of Foreign Affairs"],
+		["Interior", "Ministry of Interior"],
+		["Education", "Ministry of Education"],
+		["Health", "Ministry of Health"],
+		["Infrastructure", "Ministry of Infrastructure"],
+		["Industry", "Ministry of Industry"],
+		["Energy", "Ministry of Energy"],
+		["Environment", "Ministry of Environment"]
+	]
+	for index in range(ministries.size()):
+		cabinet.append({
+			"id": str(ministries[index][0]).to_lower().replace(" ", "_"),
+			"ministry": ministries[index][1],
+			"minister": "Acting Minister %02d" % (index + 1),
+			"approval": 55.0 + float(index % 4) * 3.0
+		})
+	enacted_laws.clear()
+	last_election_report = "Initial government formed at the start of the simulation."
+
+func government_coalition_seats() -> int:
+	var total := 0
+	for party in political_parties:
+		if coalition_party_ids.has(str(party.get("id", ""))):
+			total += int(party.get("seats", 0))
+	return total
+
+func government_has_majority() -> bool:
+	return government_coalition_seats() > parliament_seats / 2
+
+func appoint_minister(ministry_id: String, minister_name: String) -> bool:
+	var clean_name := minister_name.strip_edges()
+	if clean_name.length() < 3 or clean_name.length() > 36:
+		return false
+	for index in range(cabinet.size()):
+		var entry: Dictionary = cabinet[index]
+		if str(entry.get("id", "")) == ministry_id:
+			entry["minister"] = clean_name
+			entry["approval"] = clampf(float(entry.get("approval", 50.0)) + 1.5, 0.0, 100.0)
+			cabinet[index] = entry
+			state_changed.emit()
+			return true
+	return false
+
+func pass_legislation(law_id: String) -> bool:
+	if enacted_laws.has(law_id) or not government_has_majority():
+		return false
+	var law_cost := gdp * 0.0015
+	if law_id == "education_act" or law_id == "healthcare_act":
+		law_cost = gdp * 0.002
+	elif law_id == "green_transition":
+		law_cost = gdp * 0.0025
+	elif law_id == "infrastructure_act":
+		law_cost = gdp * 0.003
+	else:
+		return false
+	if treasury < law_cost:
+		return false
+	treasury -= law_cost
+	match law_id:
+		"education_act":
+			infrastructure["schools"] = mini(100, int(infrastructure.get("schools", 0)) + 2)
+			spending_rate = minf(0.45, spending_rate + 0.002)
+			social_mobility = clampf(social_mobility + 4.0, 0.0, 100.0)
+		"healthcare_act":
+			infrastructure["hospitals"] = mini(100, int(infrastructure.get("hospitals", 0)) + 2)
+			social_welfare_rate = minf(0.08, social_welfare_rate + 0.002)
+			stability = minf(100.0, stability + 1.5)
+		"green_transition":
+			infrastructure["power"] = mini(100, int(infrastructure.get("power", 0)) + 2)
+			annual_gdp_growth = minf(15.0, annual_gdp_growth + 0.15)
+			inflation = maxf(0.0, inflation - 0.1)
+		"infrastructure_act":
+			infrastructure["roads"] = mini(100, int(infrastructure.get("roads", 0)) + 2)
+			infrastructure["airports"] = mini(100, int(infrastructure.get("airports", 0)) + 1)
+			annual_gdp_growth = minf(15.0, annual_gdp_growth + 0.2)
+	enacted_laws.append(law_id)
+	government_approval = clampf(government_approval + 2.0, 0.0, 100.0)
+	_update_budget_forecast()
+	state_changed.emit()
+	return true
+
+func _update_government_monthly() -> void:
+	var performance := (annual_gdp_growth - 2.0) * 0.32
+	performance -= maxf(0.0, inflation - 4.0) * 0.22
+	performance -= maxf(0.0, unemployment - 5.0) * 0.28
+	performance -= maxf(0.0, poverty_rate - 18.0) * 0.035
+	performance += (stability - 55.0) * 0.025
+	government_approval = clampf(government_approval + clampf(performance, -2.0, 1.5), 5.0, 95.0)
+	months_until_election -= 1
+	if months_until_election <= 0:
+		hold_election(false)
+
+func hold_election(early: bool = true) -> bool:
+	if political_parties.is_empty():
+		_initialize_government()
+	var total_weight := 0.0
+	for index in range(political_parties.size()):
+		var party: Dictionary = political_parties[index]
+		var popularity := float(party.get("popularity", 10.0))
+		if str(party.get("id", "")) == governing_party_id:
+			popularity += (government_approval - 50.0) * 0.16
+		else:
+			popularity += (50.0 - government_approval) * 0.045
+		popularity = maxf(2.0, popularity)
+		party["election_weight"] = popularity
+		total_weight += popularity
+		political_parties[index] = party
+	var assigned_seats := 0
+	var winner_id := ""
+	var winner_seats := -1
+	for index in range(political_parties.size()):
+		var party: Dictionary = political_parties[index]
+		var seats := int(floor(float(parliament_seats) * float(party.get("election_weight", 1.0)) / maxf(total_weight, 1.0)))
+		party["seats"] = seats
+		party["popularity"] = float(party.get("election_weight", 1.0)) / maxf(total_weight, 1.0) * 100.0
+		party.erase("election_weight")
+		party["government"] = false
+		assigned_seats += seats
+		if seats > winner_seats:
+			winner_seats = seats
+			winner_id = str(party.get("id", ""))
+		political_parties[index] = party
+	var remainder := parliament_seats - assigned_seats
+	if remainder > 0:
+		for index in range(remainder):
+			var party_index := index % maxi(1, political_parties.size())
+			political_parties[party_index]["seats"] = int(political_parties[party_index].get("seats", 0)) + 1
+	governing_party_id = winner_id
+	coalition_party_ids.clear()
+	coalition_party_ids.append(winner_id)
+	var sorted_parties := political_parties.duplicate(true)
+	sorted_parties.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("seats", 0)) > int(b.get("seats", 0))
+	)
+	var coalition_seats := winner_seats
+	for party in sorted_parties:
+		var party_id := str(party.get("id", ""))
+		if party_id == winner_id:
+			continue
+		if coalition_seats > parliament_seats / 2:
+			break
+		coalition_party_ids.append(party_id)
+		coalition_seats += int(party.get("seats", 0))
+	for index in range(political_parties.size()):
+		var party: Dictionary = political_parties[index]
+		party["government"] = coalition_party_ids.has(str(party.get("id", "")))
+		political_parties[index] = party
+	if early:
+		government_approval = maxf(5.0, government_approval - 4.0)
+	else:
+		government_approval = clampf(government_approval + 1.0, 5.0, 95.0)
+	months_until_election = 48
+	last_election_report = "Election complete: %s leads with %d seats. Coalition holds %d of %d seats." % [winner_id.replace("_", " ").capitalize(), maxi(0, winner_seats), government_coalition_seats(), parliament_seats]
+	state_changed.emit()
+	return true
+
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
@@ -1331,6 +1516,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	defense_budget_rate = 0.035
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	_initialize_diplomacy()
+	_initialize_government()
 	state_changed.emit()
 
 func save_game() -> bool:
@@ -1366,7 +1552,12 @@ func save_game() -> bool:
 		"middle_class_share": middle_class_share, "wealthy_share": wealthy_share,
 		"income_inequality": income_inequality, "household_consumption": household_consumption,
 		"social_welfare_rate": social_welfare_rate, "monthly_welfare_cost": monthly_welfare_cost,
-		"social_mobility": social_mobility,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
+		"social_mobility": social_mobility,
+		"government_type": government_type, "government_approval": government_approval,
+		"governing_party_id": governing_party_id, "coalition_party_ids": coalition_party_ids,
+		"parliament_seats": parliament_seats, "months_until_election": months_until_election,
+		"political_parties": political_parties, "cabinet": cabinet,
+		"enacted_laws": enacted_laws, "last_election_report": last_election_report,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -1470,6 +1661,28 @@ func load_game() -> bool:
 	social_welfare_rate = float(data.get("social_welfare_rate", 0.02))
 	monthly_welfare_cost = float(data.get("monthly_welfare_cost", gdp * social_welfare_rate / 12.0))
 	social_mobility = float(data.get("social_mobility", 50.0))
+	government_type = str(data.get("government_type", "Constitutional democracy"))
+	government_approval = float(data.get("government_approval", 58.0))
+	governing_party_id = str(data.get("governing_party_id", ""))
+	coalition_party_ids.clear()
+	for party_id in data.get("coalition_party_ids", []):
+		coalition_party_ids.append(str(party_id))
+	parliament_seats = int(data.get("parliament_seats", 300))
+	months_until_election = int(data.get("months_until_election", 48))
+	political_parties.clear()
+	for party_data in data.get("political_parties", []):
+		if typeof(party_data) == TYPE_DICTIONARY:
+			political_parties.append(party_data)
+	cabinet.clear()
+	for minister_data in data.get("cabinet", []):
+		if typeof(minister_data) == TYPE_DICTIONARY:
+			cabinet.append(minister_data)
+	enacted_laws.clear()
+	for law_id in data.get("enacted_laws", []):
+		enacted_laws.append(str(law_id))
+	last_election_report = str(data.get("last_election_report", "No election has been held yet."))
+	if political_parties.is_empty() or cabinet.is_empty():
+		_initialize_government()
 	if companies.is_empty() and not cities.is_empty():
 	regional_funds = data.get("regional_funds", {})
 	selected_region_name = str(data.get("selected_region_name", ""))

@@ -41,7 +41,8 @@ func _on_viewport_resized() -> void:
 			"cities": _show_cities(),
 			"transport": _show_transport()
 			"companies": _show_companies()
-			"banking": _show_banking()
+			"banking": _show_banking(),
+			"government": _show_government()
 
 func _clear() -> void:
 	for child in get_children():
@@ -294,7 +295,7 @@ func _show_dashboard() -> void:
 	side.add_child(_section_label("GOVERNMENT"))
 	side.add_child(_button("National budget", PANEL_ALT, _show_budget))
 	side.add_child(_button("World nations / AI", PANEL_ALT, _show_world_nations))
-	side.add_child(_action_button("Cabinet & ministries", "Government simulation coming in Phase 2"))
+	side.add_child(_button("Cabinet & ministries", PANEL_ALT, _show_government))
 	side.add_child(_button("Diplomacy & foreign affairs", PANEL_ALT, _show_diplomacy))
 	side.add_child(_button("Military & defense", PANEL_ALT, _show_military))
 	side.add_child(_section_label("DEVELOPMENT"))
@@ -822,6 +823,99 @@ func _show_transport() -> void:
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 
+
+func _show_government() -> void:
+	current_screen = "government"
+	var body := _base("Government & parliament", "CABINET  /  POLITICAL PARTIES  /  ELECTIONS  /  NATIONAL REFORMS")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("PUBLIC APPROVAL", "%.1f%%" % GameState.government_approval, "NATIONAL GOVERNMENT"))
+	summary.add_child(_stat_card("COALITION SEATS", "%d / %d" % [GameState.government_coalition_seats(), GameState.parliament_seats], "PARLIAMENTARY SUPPORT"))
+	summary.add_child(_stat_card("NEXT ELECTION", "%d MONTHS" % GameState.months_until_election, "FOUR-YEAR CYCLE"))
+	summary.add_child(_stat_card("GOVERNMENT TYPE", GameState.government_type, "POLITICAL SYSTEM"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 12)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("CABINET AND MINISTRIES"))
+	var minister_name := LineEdit.new()
+	minister_name.placeholder_text = "Enter replacement minister name"
+	sections.add_child(minister_name)
+	var ministry_picker := OptionButton.new()
+	for ministry in GameState.cabinet:
+		ministry_picker.add_item(str(ministry.get("ministry", "Ministry")))
+		ministry_picker.set_item_metadata(ministry_picker.item_count - 1, str(ministry.get("id", "")))
+	sections.add_child(ministry_picker)
+	sections.add_child(_button("APPOINT / REPLACE MINISTER", BLUE, func():
+		if ministry_picker.item_count > 0 and GameState.appoint_minister(str(ministry_picker.get_item_metadata(ministry_picker.selected)), minister_name.text):
+			_show_government()
+		else:
+			_show_toast("Appointment failed: enter a name between 3 and 36 characters.")
+	))
+	for ministry in GameState.cabinet:
+		var panel := PanelContainer.new()
+		panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 8))
+		sections.add_child(panel)
+		var row := HBoxContainer.new()
+		panel.add_child(row)
+		var label := Label.new()
+		label.text = "%s  •  %s" % [str(ministry.get("ministry", "Ministry")), str(ministry.get("minister", "Vacant"))]
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.add_theme_color_override("font_color", TEXT)
+		row.add_child(label)
+		row.add_child(_muted_label("Approval %.0f%%" % float(ministry.get("approval", 50.0))))
+	sections.add_child(_section_label("POLITICAL PARTIES AND PARLIAMENT"))
+	var parties := GameState.political_parties.duplicate(true)
+	parties.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("seats", 0)) > int(b.get("seats", 0))
+	)
+	for party in parties:
+		var is_government := bool(party.get("government", false))
+		sections.add_child(_muted_label("%s  •  %s  •  %d seats  •  %.1f%% support%s" % [
+			str(party.get("name", "Party")), str(party.get("ideology", "Independent")),
+			int(party.get("seats", 0)), float(party.get("popularity", 0.0)),
+			"  •  GOVERNMENT" if is_government else "  •  OPPOSITION"
+		]))
+	sections.add_child(_muted_label("Coalition status: %s. %s" % [
+		"MAJORITY" if GameState.government_has_majority() else "MINORITY",
+		GameState.last_election_report
+	]))
+	sections.add_child(_button("CALL EARLY GENERAL ELECTION", GOLD, func():
+		GameState.hold_election(true)
+		_show_government()
+	))
+	sections.add_child(_section_label("NATIONAL LEGISLATION"))
+	var laws := [
+		["education_act", "National Education Act", "Expand schools and improve social mobility"],
+		["healthcare_act", "Universal Healthcare Act", "Expand hospitals and social protection"],
+		["green_transition", "Green Transition Act", "Invest in power infrastructure and cleaner growth"],
+		["infrastructure_act", "National Infrastructure Act", "Expand roads and airport capacity"]
+	]
+	for law in laws:
+		var law_id := str(law[0])
+		var law_panel := PanelContainer.new()
+		law_panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 8))
+		sections.add_child(law_panel)
+		var law_box := VBoxContainer.new()
+		law_panel.add_child(law_box)
+		law_box.add_child(_muted_label("%s  •  %s" % [str(law[1]), str(law[2])]))
+		if GameState.enacted_laws.has(law_id):
+			law_box.add_child(_muted_label("ENACTED"))
+		else:
+			law_box.add_child(_button("PASS BILL  •  EST. %s" % _money(GameState.gdp * (0.003 if law_id == "infrastructure_act" else (0.0025 if law_id == "green_transition" else (0.002 if law_id == "education_act" or law_id == "healthcare_act" else 0.0015)))), GREEN, func(id: String = law_id):
+				if GameState.pass_legislation(id):
+					_show_government()
+				else:
+					_show_toast("Bill failed: coalition needs a majority and treasury must cover the cost.")
+			))
+	sections.add_child(_muted_label("Political simulation is a strategic model: party popularity and seats are simulated, ministers are player-assigned names, and laws apply national-level effects. It does not represent real elected officials or a complete constitutional/legal system."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_society() -> void:
 	current_screen = "society"
