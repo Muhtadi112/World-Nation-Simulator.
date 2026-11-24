@@ -141,7 +141,6 @@ var tourism_employment: int = 0
 var heritage_sites: Array[Dictionary] = []
 var tourism_event_cooldown: int = 0
 var last_tourism_report: String = "Tourism programme established."
-var monthly_tourism_cost: float = 0.0
 
 var government_type: String = "Constitutional democracy"
 var government_approval: float = 58.0
@@ -288,8 +287,8 @@ func upgrade_transport_facility(city_id: String, facility: String) -> bool:
 func transport_route_cost(from_city_id: String, to_city_id: String, mode: String = "road") -> float:
 	if from_city_id == to_city_id or not ["road", "rail", "air", "sea"].has(mode):
 		return -1.0
-	var from_city := get_city(from_city_id)
-	var to_city := get_city(to_city_id)
+	var from_city: Dictionary = get_city(from_city_id)
+	var to_city: Dictionary = get_city(to_city_id)
 	if from_city.is_empty() or to_city.is_empty():
 		return -1.0
 	for route in transport_routes:
@@ -322,20 +321,13 @@ func build_transport_route(from_city_id: String, to_city_id: String, mode: Strin
 	state_changed.emit()
 	return true
 
-func _run_monthly_infrastructure() -> void:
-	var infrastructure_score := (float(infrastructure.get("roads", 0)) + float(infrastructure.get("power", 0)) + float(infrastructure.get("ports", 0)) + float(infrastructure.get("airports", 0))) / 400.0
-	for index in range(cities.size()):
-		var city: Dictionary = cities[index]
-		city["development_index"] = clampf(float(city.get("development_index", 25.0)) + infrastructure_score * 0.025, 0.0, 100.0)
-		cities[index] = city
-
 func _run_monthly_transport_simulation() -> void:
 	var city_route_counts: Dictionary = {}
 	var city_transport_scores: Dictionary = {}
 	for index in range(transport_routes.size()):
 		var route: Dictionary = transport_routes[index]
-		var from_city := get_city(str(route.get("from", "")))
-		var to_city := get_city(str(route.get("to", "")))
+		var from_city: Dictionary = get_city(str(route.get("from", "")))
+		var to_city: Dictionary = get_city(str(route.get("to", "")))
 		if from_city.is_empty() or to_city.is_empty():
 			continue
 		var mode := str(route.get("mode", "road"))
@@ -1615,10 +1607,10 @@ func _initialize_mining() -> void:
 	monthly_mining_revenue = 0.0
 	monthly_mining_cost = 0.0
 	var country_id := str(selected_country.get("id", "AAA"))
-	var seed_value := abs(country_id.hash())
+	var seed_value: int = absi(country_id.hash())
 	for index in range(mining_resources.size()):
 		var resource := mining_resources[index]
-		var variation: float = 0.45 + float(posmod(seed_value / (index + 1) + index * 173, 1100)) / 1000.0
+		var variation := 0.45 + float(posmod(seed_value / (index + 1) + index * 173, 1100)) / 1000.0
 		resource_reserves[resource] = maxf(0.0, gdp / 1000000000.0 * variation * (1.0 + float(index % 4) * 0.35))
 		resource_inventory[resource] = 0.0
 		resource_production[resource] = 0.0
