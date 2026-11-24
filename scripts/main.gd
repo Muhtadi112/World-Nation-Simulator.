@@ -51,7 +51,8 @@ func _on_viewport_resized() -> void:
 			"intelligence": _show_intelligence(),
 			"immigration": _show_immigration(),
 			"media": _show_media(),
-			"services": _show_public_services()
+			"services": _show_public_services(),
+			"tourism": _show_tourism()
 
 func _clear() -> void:
 	for child in get_children():
@@ -325,6 +326,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Immigration & citizenship", PANEL_ALT, _show_immigration))
 	side.add_child(_button("National media & public opinion", PANEL_ALT, _show_media))
 	side.add_child(_button("Healthcare & education", PANEL_ALT, _show_public_services))
+	side.add_child(_button("Culture, tourism & heritage", PANEL_ALT, _show_tourism))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
@@ -907,6 +909,90 @@ func _show_public_services() -> void:
 	sections.add_child(_muted_label("Monthly health spending %s  •  Monthly education spending %s" % [_money(GameState.monthly_healthcare_cost), _money(GameState.monthly_education_cost)]))
 	sections.add_child(_muted_label(GameState.public_services_report))
 	sections.add_child(_muted_label("All public health and education figures are simplified fictional gameplay indicators, not medical advice or official national statistics."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+func _show_tourism() -> void:
+	current_screen = "tourism"
+	var body := _base("Culture, tourism & heritage", "VISITOR ECONOMY  /  CULTURAL INFLUENCE  /  HERITAGE PRESERVATION")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("ANNUAL VISITORS", _format_format_number(GameState.annual_tourist_arrivals), "SIMULATED ARRIVALS"))
+	summary.add_child(_stat_card("TOURISM ECONOMY", _money(GameState.tourism_revenue), "ESTIMATED YEARLY OUTPUT"))
+	summary.add_child(_stat_card("CULTURAL INFLUENCE", "%.1f / 100" % GameState.cultural_influence, "SOFT POWER INDEX"))
+	summary.add_child(_stat_card("HERITAGE PRESERVATION", "%.1f / 100" % GameState.heritage_preservation, "PRESERVATION POLICY"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("TOURISM INDUSTRY"))
+	sections.add_child(_muted_label("Attractiveness %.1f  •  Capacity %.1f  •  Satisfaction %.1f  •  Safety %.1f" % [GameState.tourism_attractiveness, GameState.tourism_capacity, GameState.tourism_satisfaction, GameState.tourism_safety]))
+	sections.add_child(_muted_label("Visitors this month %s  •  Tourism employment %s  •  Monthly visitor spending %s  •  Monthly programme cost %s" % [_format_format_number(GameState.monthly_tourist_arrivals), _format_format_number(GameState.tourism_employment), _money(GameState.monthly_tourism_revenue), _money(GameState.monthly_tourism_cost)]))
+	for kind in ["heritage", "hotel", "transport", "district"]:
+		var title := {"heritage": "RESTORE HERITAGE SITES", "hotel": "BUILD HOTEL CAPACITY", "transport": "IMPROVE VISITOR TRANSPORT", "district": "DEVELOP CULTURAL DISTRICT"}[kind]
+		sections.add_child(_button("%s  •  %s" % [title, _money(GameState.tourism_project_cost(kind))], BLUE, func(k: String = kind):
+			if GameState.invest_in_tourism(k):
+				_show_tourism()
+			else:
+				_show_toast("Project unavailable: insufficient treasury.")
+		))
+	sections.add_child(_section_label("CULTURAL HERITAGE REGISTER"))
+	for site in GameState.heritage_sites:
+		sections.add_child(_muted_label("%s  •  Condition %.1f / 100  •  Level %d" % [str(site.get("name", "Heritage asset")), float(site.get("condition", 0.0)), int(site.get("level", 1))]))
+	sections.add_child(_section_label("TOURISM AND CULTURAL POLICY"))
+	var visa := HSlider.new()
+	visa.min_value = 0
+	visa.max_value = 100
+	visa.step = 5
+	visa.value = GameState.visa_access
+	sections.add_child(visa)
+	var visa_label := _muted_label("Visa openness: %.0f / 100" % visa.value)
+	sections.add_child(visa_label)
+	visa.value_changed.connect(func(v: float): visa_label.text = "Visa openness: %.0f / 100" % v)
+	var safety := HSlider.new()
+	safety.min_value = 0
+	safety.max_value = 100
+	safety.step = 5
+	safety.value = GameState.tourism_safety
+	sections.add_child(safety)
+	var safety_label := _muted_label("Visitor safety: %.0f / 100" % safety.value)
+	sections.add_child(safety_label)
+	safety.value_changed.connect(func(v: float): safety_label.text = "Visitor safety: %.0f / 100" % v)
+	var preservation := HSlider.new()
+	preservation.min_value = 0
+	preservation.max_value = 100
+	preservation.step = 5
+	preservation.value = GameState.heritage_preservation
+	sections.add_child(preservation)
+	var preservation_label := _muted_label("Heritage protection: %.0f / 100" % preservation.value)
+	sections.add_child(preservation_label)
+	preservation.value_changed.connect(func(v: float): preservation_label.text = "Heritage protection: %.0f / 100" % v)
+	var budget := HSlider.new()
+	budget.min_value = 0.1
+	budget.max_value = 2.0
+	budget.step = 0.1
+	budget.value = GameState.tourism_budget_rate * 100.0
+	sections.add_child(budget)
+	var budget_label := _muted_label("Tourism programme budget: %.1f%% GDP" % budget.value)
+	sections.add_child(budget_label)
+	budget.value_changed.connect(func(v: float): budget_label.text = "Tourism programme budget: %.1f%% GDP" % v)
+	sections.add_child(_button("APPLY TOURISM POLICY", GREEN, func():
+		GameState.set_tourism_policy(budget.value / 100.0, visa.value, safety.value, preservation.value)
+		_show_tourism()
+	))
+	sections.add_child(_button("HOST NATIONAL CULTURAL FESTIVAL  •  %s" % _money(maxf(GameState.gdp * 0.0008, 1500000.0)), GOLD, func():
+		if GameState.host_cultural_event():
+			_show_tourism()
+		else:
+			_show_toast("Event unavailable: check treasury and six-month cooldown.")
+	))
+	sections.add_child(_muted_label("Event cooldown: %d months  •  %s" % [GameState.tourism_event_cooldown, GameState.last_tourism_report]))
+	sections.add_child(_muted_label("Figures are abstract gameplay estimates. Heritage register entries are generic placeholders, not verified real-world sites."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_media() -> void:
