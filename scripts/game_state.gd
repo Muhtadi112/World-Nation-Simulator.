@@ -2434,7 +2434,7 @@ func process_citizenship_applications() -> bool:
 	treasury -= cost
 	citizenship_applications -= approved
 	citizenship_granted += approved
-	immigration_report = "%s citizenship applications approved. New citizens: %s." % [_format_number(approved), _format_number(approved)]
+	immigration_report = "%s citizenship applications approved. New citizens: %s." % [_format_trade_units(approved), _format_trade_units(approved)]
 	state_changed.emit()
 	return true
 
@@ -2467,9 +2467,9 @@ func _run_monthly_immigration() -> void:
 	stability = clampf(stability + (integration_capacity - 45.0) * 0.001 - integration_gap * 0.008, 0.0, 100.0)
 	monthly_immigration_cost = float(admitted) * maxf(gdp / maxf(float(population), 1.0) * 0.025, 18.0) + gdp * 0.00008 * (refugee_acceptance_rate / 100.0)
 	if refugee_arrivals > 0:
-		immigration_report = "Monthly arrivals: %s • Refugees admitted: %s • Net migration: %s." % [_format_number(arrivals), _format_number(refugee_arrivals), _format_number(monthly_net_migration)]
+		immigration_report = "Monthly arrivals: %s • Refugees admitted: %s • Net migration: %s." % [_format_trade_units(arrivals), _format_trade_units(refugee_arrivals), _format_trade_units(monthly_net_migration)]
 	else:
-		immigration_report = "Monthly arrivals: %s • Departures: %s • Net migration: %s." % [_format_number(arrivals), _format_number(departures), _format_number(monthly_net_migration)]
+		immigration_report = "Monthly arrivals: %s • Departures: %s • Net migration: %s." % [_format_trade_units(arrivals), _format_trade_units(departures), _format_trade_units(monthly_net_migration)]
 	_update_budget_forecast()
 
 func _update_budget_forecast() -> void:
