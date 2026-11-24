@@ -2712,6 +2712,107 @@ func _run_monthly_immigration() -> void:
 		immigration_report = "Monthly arrivals: %s • Departures: %s • Net migration: %s." % [_format_trade_units(arrivals), _format_trade_units(departures), _format_trade_units(monthly_net_migration)]
 	_update_budget_forecast()
 
+func _initialize_tourism() -> void:
+	tourism_budget_rate = 0.004
+	tourism_attractiveness = clampf(35.0 + float(infrastructure.get("airports", 0)) * 1.8 + float(infrastructure.get("ports", 0)) * 1.2 + environmental_quality * 0.12, 20.0, 78.0)
+	tourism_capacity = clampf(22.0 + float(infrastructure.get("airports", 0)) * 2.0 + float(infrastructure.get("roads", 0)) * 0.5, 10.0, 70.0)
+	tourism_satisfaction = 62.0
+	tourism_safety = clampf(stability * 0.65 + 22.0, 20.0, 90.0)
+	visa_access = 45.0
+	heritage_preservation = 58.0
+	cultural_influence = 24.0
+	annual_tourist_arrivals = maxi(10000, int(float(population) * 0.025))
+	monthly_tourist_arrivals = int(float(annual_tourist_arrivals) / 12.0)
+	tourism_revenue = gdp * 0.018
+	monthly_tourism_revenue = tourism_revenue / 12.0
+	tourism_employment = maxi(1000, int(float(population) * 0.008))
+	heritage_sites = [{"id":"heritage_1","name":"National Heritage District","condition":72.0,"level":1},{"id":"heritage_2","name":"Historic Landmark","condition":65.0,"level":1},{"id":"heritage_3","name":"Cultural Landscape","condition":68.0,"level":1}]
+	tourism_event_cooldown = 0
+	last_tourism_report = "Generic heritage assets registered; not verified real-world landmarks."
+
+func tourism_project_cost(kind: String) -> float:
+	var rate := 0.001
+	match kind:
+		"heritage": rate = 0.0007
+		"hotel": rate = 0.0011
+		"transport": rate = 0.0009
+		"district": rate = 0.0013
+		_: return 0.0
+	return maxf(gdp * rate * (1.0 + tourism_capacity / 100.0), 2500000.0)
+
+func invest_in_tourism(kind: String) -> bool:
+	var cost := tourism_project_cost(kind)
+	if cost <= 0.0 or treasury < cost:
+		return false
+	treasury -= cost
+	match kind:
+		"heritage":
+			heritage_preservation = clampf(heritage_preservation + 8.0, 0.0, 100.0)
+			for site in heritage_sites:
+				site["condition"] = clampf(float(site.get("condition", 60.0)) + 5.0, 0.0, 100.0)
+		"hotel":
+			tourism_capacity = clampf(tourism_capacity + 7.0, 0.0, 100.0)
+			tourism_attractiveness = clampf(tourism_attractiveness + 2.0, 0.0, 100.0)
+		"transport":
+			tourism_capacity = clampf(tourism_capacity + 4.0, 0.0, 100.0)
+			tourism_satisfaction = clampf(tourism_satisfaction + 3.0, 0.0, 100.0)
+		"district":
+			tourism_attractiveness = clampf(tourism_attractiveness + 7.0, 0.0, 100.0)
+			cultural_influence = clampf(cultural_influence + 3.0, 0.0, 100.0)
+	_update_budget_forecast()
+	state_changed.emit()
+	return true
+
+func set_tourism_policy(budget: float, visas: float, safety: float, preservation: float) -> void:
+	tourism_budget_rate = clampf(budget, 0.001, 0.02)
+	visa_access = clampf(visas, 0.0, 100.0)
+	tourism_safety = clampf(safety, 0.0, 100.0)
+	heritage_preservation = clampf(preservation, 0.0, 100.0)
+	_update_budget_forecast()
+	state_changed.emit()
+
+func host_cultural_event() -> bool:
+	var cost := maxf(gdp * 0.0008, 1500000.0)
+	if treasury < cost or tourism_event_cooldown > 0:
+		return false
+	treasury -= cost
+	tourism_event_cooldown = 6
+	tourism_attractiveness = clampf(tourism_attractiveness + 5.0, 0.0, 100.0)
+	cultural_influence = clampf(cultural_influence + 4.0, 0.0, 100.0)
+	tourism_satisfaction = clampf(tourism_satisfaction + 2.0, 0.0, 100.0)
+	last_tourism_report = "National cultural festival hosted; six-month cooldown started."
+	_update_budget_forecast()
+	state_changed.emit()
+	return true
+
+func _run_monthly_tourism() -> void:
+	if gdp <= 0.0 or population <= 0:
+		return
+	if tourism_event_cooldown > 0:
+		tourism_event_cooldown -= 1
+	var safety_factor := clampf(tourism_safety / 65.0, 0.25, 1.35)
+	var visa_factor := 0.55 + visa_access / 100.0
+	var appeal_factor := clampf(tourism_attractiveness / 50.0, 0.25, 1.8)
+	var capacity_factor := clampf(tourism_capacity / 45.0, 0.3, 1.5)
+	var environment_factor := clampf(environmental_quality / 65.0, 0.45, 1.25)
+	monthly_tourist_arrivals = maxi(0, int(float(population) * 0.00017 * safety_factor * visa_factor * appeal_factor * capacity_factor * environment_factor))
+	monthly_tourist_arrivals = int(float(monthly_tourist_arrivals) * clampf(tourism_satisfaction / 65.0, 0.4, 1.3))
+	annual_tourist_arrivals = monthly_tourist_arrivals * 12
+	var visitor_spend := maxf(gdp / maxf(float(population), 1.0) * 0.42, 120.0)
+	monthly_tourism_revenue = float(monthly_tourist_arrivals) * visitor_spend
+	tourism_revenue = monthly_tourism_revenue * 12.0
+	tourism_employment = maxi(0, int(float(monthly_tourist_arrivals) * 0.22 + float(population) * 0.002))
+	tourism_satisfaction = clampf(tourism_satisfaction + (tourism_capacity - 40.0) * 0.008 + (tourism_safety - 60.0) * 0.006, 0.0, 100.0)
+	tourism_attractiveness = clampf(tourism_attractiveness + (heritage_preservation - 55.0) * 0.006 + (environmental_quality - 55.0) * 0.004 - maxf(0.0, 50.0 - tourism_safety) * 0.004, 0.0, 100.0)
+	cultural_influence = clampf(cultural_influence + (tourism_attractiveness - 50.0) * 0.003, 0.0, 100.0)
+	for site in heritage_sites:
+		site["condition"] = clampf(float(site.get("condition", 60.0)) - 0.12 + heritage_preservation * 0.0015, 0.0, 100.0)
+	var tourism_tax := monthly_tourism_revenue * 0.08
+	treasury += tourism_tax
+	annual_gdp_growth = clampf(annual_gdp_growth + (monthly_tourism_revenue / maxf(gdp / 12.0, 1.0)) * 0.025, -15.0, 20.0)
+	last_tourism_report = "Visitors %s this month • Annual %s • Tourism output %s/year • Jobs %s • Tax %s." % [_format_trade_units(monthly_tourist_arrivals), _format_trade_units(annual_tourist_arrivals), _format_trade_money(tourism_revenue), _format_trade_units(tourism_employment), _format_trade_money(tourism_tax)]
+	_update_budget_forecast()
+
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0 + maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
