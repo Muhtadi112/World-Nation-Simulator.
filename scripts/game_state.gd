@@ -40,6 +40,15 @@ var monthly_welfare_cost: float = 0.0
 var social_mobility: float = 50.0
 var infrastructure: Dictionary = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 var city_catalog: Array[Dictionary] = []
+var research_budget_rate: float = 0.015
+var research_labs: int = 1
+var scientists: int = 1200
+var research_points: float = 0.0
+var active_research_id: String = ""
+var technology_tree: Array[Dictionary] = []
+var completed_technologies: Array[String] = []
+var research_report: String = "No technology projects completed yet."
+
 var government_type: String = "Constitutional democracy"
 var government_approval: float = 58.0
 var governing_party_id: String = ""
@@ -901,6 +910,7 @@ func _advance_day() -> void:
 		_run_monthly_company_simulation()
 		_run_monthly_banking_simulation()
 		_run_monthly_social_simulation()
+		_run_monthly_research()
 		_update_government_monthly()
 		_run_monthly_city_simulation()
 		_update_market_prices()
@@ -914,7 +924,7 @@ func _run_monthly_economy() -> void:
 	monthly_revenue = gdp * tax_rate / 12.0
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
-	monthly_expenses = gdp * spending_rate / 12.0 + monthly_defense_cost + monthly_welfare_cost
+	monthly_expenses = gdp * (spending_rate + research_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 	treasury += monthly_balance
 	if treasury < 0.0:
@@ -1449,10 +1459,133 @@ func hold_election(early: bool = true) -> bool:
 	state_changed.emit()
 	return true
 
+func _initialize_research() -> void:
+	research_budget_rate = 0.015
+	research_labs = 1
+	scientists = maxi(500, int(float(population) * 0.00002))
+	research_points = 0.0
+	active_research_id = ""
+	completed_technologies.clear()
+	research_report = "Research institutions established."
+	technology_tree = [
+		{"id":"precision_agriculture","name":"Precision Agriculture","field":"Agriculture","description":"Improve crop yields and food security.","cost":120.0,"unlocked":false},
+		{"id":"industrial_robotics","name":"Industrial Robotics","field":"Industry","description":"Increase factory productivity and industrial output.","cost":180.0,"unlocked":false},
+		{"id":"advanced_materials","name":"Advanced Materials","field":"Industry","description":"Improve manufacturing efficiency and export competitiveness.","cost":240.0,"unlocked":false},
+		{"id":"smart_grid","name":"Smart Electricity Grid","field":"Energy","description":"Reduce energy waste and strengthen power infrastructure.","cost":160.0,"unlocked":false},
+		{"id":"renewable_storage","name":"Renewable Energy Storage","field":"Energy","description":"Improve clean energy reliability and energy security.","cost":220.0,"unlocked":false},
+		{"id":"medical_biotech","name":"Medical Biotechnology","field":"Health","description":"Improve healthcare outcomes and life quality.","cost":210.0,"unlocked":false},
+		{"id":"digital_education","name":"Digital Education","field":"Education","description":"Raise education quality and social mobility.","cost":150.0,"unlocked":false},
+		{"id":"ai_governance","name":"Artificial Intelligence","field":"Digital","description":"Improve national productivity and public administration.","cost":280.0,"unlocked":false},
+		{"id":"cyber_defense","name":"Cyber Defense","field":"Defense","description":"Strengthen military readiness and national resilience.","cost":190.0,"unlocked":false},
+		{"id":"autonomous_transport","name":"Autonomous Transport","field":"Transport","description":"Improve logistics and transport network efficiency.","cost":250.0,"unlocked":false},
+		{"id":"orbital_launch","name":"Orbital Launch Systems","field":"Space","description":"Unlock a national space programme and launch capability.","cost":360.0,"unlocked":false},
+		{"id":"deep_space_missions","name":"Deep Space Missions","field":"Space","description":"Advance scientific capability beyond Earth orbit.","cost":520.0,"unlocked":false}
+	]
+
+func start_research(technology_id: String) -> bool:
+	if not active_research_id.is_empty():
+		return false
+	for technology in technology_tree:
+		if str(technology.get("id", "")) == technology_id:
+			if bool(technology.get("unlocked", false)) or completed_technologies.has(technology_id):
+				return false
+			if technology_id == "deep_space_missions" and not completed_technologies.has("orbital_launch"):
+				return false
+			active_research_id = technology_id
+			research_points = 0.0
+			research_report = "Research started: %s." % str(technology.get("name", technology_id))
+			state_changed.emit()
+			return true
+	return false
+
+func set_research_budget(new_rate: float) -> void:
+	research_budget_rate = clampf(new_rate, 0.005, 0.06)
+	_update_budget_forecast()
+	state_changed.emit()
+
+func invest_in_research_lab() -> bool:
+	var cost := maxf(gdp * 0.0018, 50000000.0) * float(research_labs + 1)
+	if treasury < cost or research_labs >= 30:
+		return false
+	treasury -= cost
+	research_labs += 1
+	scientists += maxi(250, int(float(population) * 0.000008))
+	research_report = "Research laboratory expanded. Research capacity increased."
+	state_changed.emit()
+	return true
+
+func _run_monthly_research() -> void:
+	if active_research_id.is_empty():
+		return
+	var monthly_funding := gdp * research_budget_rate / 12.0
+	var points_gained := 4.0 + research_budget_rate * 500.0 + float(research_labs) * 2.5 + float(infrastructure.get("schools", 0)) * 0.18
+	points_gained *= clampf(float(scientists) / 1200.0, 0.6, 4.0)
+	for index in range(technology_tree.size()):
+		var technology: Dictionary = technology_tree[index]
+		if str(technology.get("id", "")) != active_research_id:
+			continue
+		research_points += points_gained
+		var required := float(technology.get("cost", 100.0))
+		if research_points >= required:
+			var finished_id := active_research_id
+			var finished_name := str(technology.get("name", finished_id))
+			technology["unlocked"] = true
+			technology_tree[index] = technology
+			completed_technologies.append(finished_id)
+			active_research_id = ""
+			research_points = 0.0
+			_apply_technology_effect(finished_id)
+			research_report = "Technology unlocked: %s." % finished_name
+		else:
+			research_report = "%s: %.1f / %.0f research points. Funding %.1fM/month." % [
+				str(technology.get("name", active_research_id)), research_points, required, monthly_funding / 1000000.0
+			]
+		break
+
+func _apply_technology_effect(technology_id: String) -> void:
+	match technology_id:
+		"precision_agriculture":
+			resource_stockpiles["food"] = float(resource_stockpiles.get("food", 0.0)) * 1.12
+			annual_gdp_growth += 0.15
+		"industrial_robotics":
+			industrial_capacity = minf(0.35, industrial_capacity + 0.025)
+			industrial_output *= 1.08
+			annual_gdp_growth += 0.25
+		"advanced_materials":
+			industrial_output *= 1.10
+			annual_gdp_growth += 0.2
+		"smart_grid":
+			infrastructure["power"] = mini(100, int(infrastructure.get("power", 0)) + 3)
+			annual_gdp_growth += 0.15
+		"renewable_storage":
+			resource_stockpiles["energy"] = float(resource_stockpiles.get("energy", 0.0)) * 1.15
+			inflation = maxf(0.0, inflation - 0.2)
+		"medical_biotech":
+			infrastructure["hospitals"] = mini(100, int(infrastructure.get("hospitals", 0)) + 3)
+			stability = minf(100.0, stability + 2.0)
+		"digital_education":
+			infrastructure["schools"] = mini(100, int(infrastructure.get("schools", 0)) + 3)
+			social_mobility = minf(100.0, social_mobility + 6.0)
+		"ai_governance":
+			annual_gdp_growth += 0.4
+			government_approval = minf(100.0, government_approval + 2.0)
+		"cyber_defense":
+			military_readiness = minf(100.0, military_readiness + 8.0)
+		"autonomous_transport":
+			annual_gdp_growth += 0.25
+			for route_index in range(transport_routes.size()):
+				transport_routes[route_index]["capacity"] = float(transport_routes[route_index].get("capacity", 0.0)) * 1.12
+		"orbital_launch":
+			infrastructure["airports"] = mini(100, int(infrastructure.get("airports", 0)) + 1)
+			annual_gdp_growth += 0.1
+		"deep_space_missions":
+			social_mobility = minf(100.0, social_mobility + 2.0)
+	_update_budget_forecast()
+
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate) / 12.0
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate) / 12.0
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -1517,6 +1650,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	_initialize_diplomacy()
 	_initialize_government()
+	_initialize_research()
 	state_changed.emit()
 
 func save_game() -> bool:
@@ -1557,7 +1691,11 @@ func save_game() -> bool:
 		"governing_party_id": governing_party_id, "coalition_party_ids": coalition_party_ids,
 		"parliament_seats": parliament_seats, "months_until_election": months_until_election,
 		"political_parties": political_parties, "cabinet": cabinet,
-		"enacted_laws": enacted_laws, "last_election_report": last_election_report,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
+		"enacted_laws": enacted_laws, "last_election_report": last_election_report,
+		"research_budget_rate": research_budget_rate, "research_labs": research_labs,
+		"scientists": scientists, "research_points": research_points,
+		"active_research_id": active_research_id, "technology_tree": technology_tree,
+		"completed_technologies": completed_technologies, "research_report": research_report,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -1681,6 +1819,21 @@ func load_game() -> bool:
 	for law_id in data.get("enacted_laws", []):
 		enacted_laws.append(str(law_id))
 	last_election_report = str(data.get("last_election_report", "No election has been held yet."))
+	research_budget_rate = float(data.get("research_budget_rate", 0.015))
+	research_labs = int(data.get("research_labs", 1))
+	scientists = int(data.get("scientists", maxi(500, int(float(population) * 0.00002))))
+	research_points = float(data.get("research_points", 0.0))
+	active_research_id = str(data.get("active_research_id", ""))
+	technology_tree.clear()
+	for technology_data in data.get("technology_tree", []):
+		if typeof(technology_data) == TYPE_DICTIONARY:
+			technology_tree.append(technology_data)
+	completed_technologies.clear()
+	for technology_id in data.get("completed_technologies", []):
+		completed_technologies.append(str(technology_id))
+	research_report = str(data.get("research_report", "No technology projects completed yet."))
+	if technology_tree.is_empty():
+		_initialize_research()
 	if political_parties.is_empty() or cabinet.is_empty():
 		_initialize_government()
 	if companies.is_empty() and not cities.is_empty():

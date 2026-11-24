@@ -42,7 +42,8 @@ func _on_viewport_resized() -> void:
 			"transport": _show_transport()
 			"companies": _show_companies()
 			"banking": _show_banking(),
-			"government": _show_government()
+			"government": _show_government(),
+			"research": _show_research()
 
 func _clear() -> void:
 	for child in get_children():
@@ -307,7 +308,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Banking & central bank", PANEL_ALT, _show_banking))
 	side.add_child(_button("Population & social policy", PANEL_ALT, _show_society))
 	side.add_child(_button("International trade", PANEL_ALT, _show_trade))
-	side.add_child(_action_button("Research", "Technology tree coming in Phase 2"))
+	side.add_child(_button("Research & technology", PANEL_ALT, _show_research))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
@@ -823,6 +824,96 @@ func _show_transport() -> void:
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 
+
+func _show_research() -> void:
+	current_screen = "research"
+	var body := _base("Research & technology", "NATIONAL SCIENCE  /  TECHNOLOGY TREE  /  INNOVATION")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("RESEARCH LABS", str(GameState.research_labs), "NATIONAL FACILITIES"))
+	summary.add_child(_stat_card("SCIENTISTS", _format_number(GameState.scientists), "RESEARCH WORKFORCE"))
+	summary.add_child(_stat_card("TECHNOLOGIES", "%d / %d" % [GameState.completed_technologies.size(), GameState.technology_tree.size()], "UNLOCKED"))
+	summary.add_child(_stat_card("RESEARCH FUNDING", "%.2f%% GDP" % (GameState.research_budget_rate * 100.0), "MONTHLY ALLOCATION"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 12)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("RESEARCH POLICY"))
+	var funding := HSlider.new()
+	funding.min_value = 0.5
+	funding.max_value = 6.0
+	funding.step = 0.25
+	funding.value = GameState.research_budget_rate * 100.0
+	sections.add_child(funding)
+	var funding_label := _muted_label("Research budget: %.2f%% of GDP" % funding.value)
+	sections.add_child(funding_label)
+	funding.value_changed.connect(func(value: float):
+		funding_label.text = "Research budget: %.2f%% of GDP" % value
+	)
+	sections.add_child(_button("APPLY RESEARCH BUDGET", BLUE, func():
+		GameState.set_research_budget(funding.value / 100.0)
+		_show_research()
+	))
+	sections.add_child(_button("EXPAND RESEARCH LAB  •  EST. %s" % _money(maxf(GameState.gdp * 0.0018, 50000000.0) * float(GameState.research_labs + 1)), GREEN, func():
+		if GameState.invest_in_research_lab():
+			_show_research()
+		else:
+			_show_toast("Cannot expand: insufficient treasury or laboratory limit reached.")
+	))
+	if not GameState.active_research_id.is_empty():
+		var active_name := GameState.active_research_id
+		var required_points := 100.0
+		for item in GameState.technology_tree:
+			if str(item.get("id", "")) == active_name:
+				active_name = str(item.get("name", active_name))
+				required_points = float(item.get("cost", 100.0))
+		var progress := clampf(GameState.research_points / maxf(required_points, 1.0), 0.0, 1.0)
+		sections.add_child(_section_label("ACTIVE PROJECT"))
+		sections.add_child(_muted_label("%s  •  %.1f / %.0f points  •  %.0f%%" % [active_name, GameState.research_points, required_points, progress * 100.0]))
+		var bar := ProgressBar.new()
+		bar.max_value = 100.0
+		bar.value = progress * 100.0
+		sections.add_child(bar)
+	else:
+		sections.add_child(_muted_label("No active project. Select an available technology below."))
+	sections.add_child(_section_label("TECHNOLOGY TREE"))
+	var current_field := ""
+	for technology in GameState.technology_tree:
+		var field := str(technology.get("field", "General"))
+		if field != current_field:
+			current_field = field
+			sections.add_child(_section_label(current_field.to_upper()))
+		var card := PanelContainer.new()
+		card.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 8))
+		sections.add_child(card)
+		var box := VBoxContainer.new()
+		card.add_child(box)
+		box.add_child(_muted_label("%s  •  %.0f research points" % [str(technology.get("name", "Technology")), float(technology.get("cost", 100.0))]))
+		box.add_child(_muted_label(str(technology.get("description", ""))))
+		var tech_id := str(technology.get("id", ""))
+		if bool(technology.get("unlocked", false)) or GameState.completed_technologies.has(tech_id):
+			box.add_child(_muted_label("UNLOCKED"))
+		elif tech_id == "deep_space_missions" and not GameState.completed_technologies.has("orbital_launch"):
+			box.add_child(_muted_label("LOCKED  •  Requires Orbital Launch Systems"))
+		elif not GameState.active_research_id.is_empty():
+			box.add_child(_muted_label("RESEARCH SLOT OCCUPIED"))
+		else:
+			box.add_child(_button("START RESEARCH", BLUE, func(id: String = tech_id):
+				if GameState.start_research(id):
+					_show_research()
+				else:
+					_show_toast("Unable to start this research project.")
+			))
+	sections.add_child(_section_label("LATEST SCIENCE REPORT"))
+	sections.add_child(_muted_label(GameState.research_report))
+	sections.add_child(_muted_label("Research is an abstract national model. Technologies apply strategic modifiers; no real-world scientific discovery or individual researcher simulation is represented."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_government() -> void:
 	current_screen = "government"
