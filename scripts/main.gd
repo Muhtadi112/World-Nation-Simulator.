@@ -229,6 +229,8 @@ func _mount_home_map(container: VBoxContainer, placeholder: Label) -> void:
 	placeholder.queue_free()
 
 func _show_country_select() -> void:
+	if GameState.country_catalog.is_empty():
+		GameState.load_country_catalog()
 	current_screen = "countries"
 	var body := _base("Choose your nation", "Career begins in 2026. Select a country to start the simulation.")
 	var split := VBoxContainer.new()
