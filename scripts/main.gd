@@ -340,139 +340,176 @@ func _show_dashboard() -> void:
 	if country.is_empty():
 		_show_country_select()
 		return
-	var body := _base("%s  %s" % [country.get("flag", ""), country.get("name", "Nation")], "NATIONAL OVERVIEW  /  %s  /  %s" % [country.get("capital", ""), GameState.game_mode.to_upper()])
-	var toolbar := HFlowContainer.new()
-	toolbar.add_theme_constant_override("h_separation", 6)
-	toolbar.add_theme_constant_override("v_separation", 6)
-	body.add_child(toolbar)
-	var date_label := Label.new()
-	date_label.text = "📅  %s" % GameState.formatted_date()
-	date_label.add_theme_color_override("font_color", TEXT)
-	toolbar.add_child(date_label)
-	toolbar.add_spacer(false)
-	toolbar.add_child(_button("Ⅱ  PAUSE" if not GameState.is_paused else "▶  RESUME", PANEL_ALT, _toggle_pause))
+	var body := _base("%s  %s" % [country.get("flag", ""), country.get("name", "Negara")], "PUSAT KENDALI NASIONAL  •  %s" % country.get("capital", ""))
+	body.add_theme_constant_override("separation", 10)
+
+	var top := PanelContainer.new()
+	top.add_theme_stylebox_override("panel", _style(Color("#10283a"), Color("#35c8dc"), 1, 14))
+	body.add_child(top)
+	var top_row := VBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 7)
+	top.add_child(top_row)
+	var date_row := HBoxContainer.new()
+	top_row.add_child(date_row)
+	var date := Label.new()
+	date.text = "📅  %s  •  %s" % [GameState.formatted_date(), "KARIER" if GameState.game_mode == "Career" else "SANDBOX"]
+	date.add_theme_color_override("font_color", CYAN)
+	date.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	date_row.add_child(date)
+	date_row.add_child(_button("Ⅱ JEDA" if not GameState.is_paused else "▶ LANJUT", PANEL_ALT, _toggle_pause))
+	var speed_row := HFlowContainer.new()
+	speed_row.add_theme_constant_override("h_separation", 6)
+	top_row.add_child(speed_row)
 	for speed in [1, 2, 5, 10]:
-		toolbar.add_child(_button("%dx" % speed, BLUE if GameState.simulation_speed == speed else PANEL_ALT, func(s: int = speed): GameState.simulation_speed = s; GameState.is_paused = false; _show_dashboard()))
-	toolbar.add_child(_button("SAVE", GREEN, _save_game))
+		var speed_button := _button("%dx" % speed, BLUE if GameState.simulation_speed == speed else PANEL_ALT, func(s: int = speed): GameState.simulation_speed = s; GameState.is_paused = false; _show_dashboard())
+		speed_button.custom_minimum_size = Vector2(54, 36)
+		speed_row.add_child(speed_button)
+	speed_row.add_child(_button("SIMPAN", GREEN, _save_game))
+
 	var stats := GridContainer.new()
 	stats.columns = 2
 	stats.add_theme_constant_override("h_separation", 8)
 	stats.add_theme_constant_override("v_separation", 8)
 	body.add_child(stats)
-	stats.add_child(_stat_card("POPULATION", _format_format_number(GameState.population), "NATIONAL RESIDENTS"))
-	stats.add_child(_stat_card("GDP", _money(GameState.gdp), "NATIONAL OUTPUT"))
-	stats.add_child(_stat_card("TREASURY", _money(GameState.treasury), "AVAILABLE FUNDS"))
-	stats.add_child(_stat_card("INFLATION", "%.1f%%" % GameState.inflation, "ANNUAL"))
-	stats.add_child(_stat_card("UNEMPLOYMENT", "%.1f%%" % GameState.unemployment, "LABOR MARKET"))
-	stats.add_child(_stat_card("PUBLIC DEBT", _money(GameState.debt), "GOVERNMENT LIABILITIES"))
-	stats.add_child(_stat_card("GDP GROWTH", "%.1f%%" % GameState.annual_gdp_growth, "ANNUAL ESTIMATE"))
-	var objective_header := _section_label("NATIONAL OBJECTIVES  /  YOUR FIRST PRIORITIES")
-	body.add_child(objective_header)
-	var objective_grid := GridContainer.new()
-	objective_grid.columns = 1
-	objective_grid.add_theme_constant_override("v_separation", 8)
-	body.add_child(objective_grid)
-	for objective in GameState.get_national_objectives():
-		objective_grid.add_child(_objective_card(objective))
-	if not GameState.active_emergency.is_empty():
-		var emergency_panel := PanelContainer.new()
-		emergency_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		emergency_panel.add_theme_stylebox_override("panel", _style(Color("#321d22"), Color("#e05b64"), 2, 12))
-		body.add_child(emergency_panel)
-		var emergency_column := VBoxContainer.new()
-		emergency_column.add_theme_constant_override("separation", 7)
-		emergency_panel.add_child(emergency_column)
-		var emergency_title := Label.new()
-		emergency_title.text = _id_text("⚠  NATIONAL EMERGENCY  /  %s" % str(GameState.active_emergency.get("type", "Disaster")).to_upper())
-		emergency_title.add_theme_color_override("font_color", Color("#ff8b91"))
-		emergency_title.add_theme_font_size_override("font_size", 14)
-		emergency_column.add_child(emergency_title)
-		var emergency_detail := Label.new()
-		emergency_detail.text = _id_text("Tingkat keparahan %.0f/100  •  Perkiraan kerusakan %s. Pilih tindakan pemerintah.") % [float(GameState.active_emergency.get("severity", 0.0)), _money(float(GameState.active_emergency.get("damage", 0.0)))]
-		emergency_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		emergency_detail.add_theme_color_override("font_color", TEXT)
-		emergency_column.add_child(emergency_detail)
-		var relief_cost := maxf(15000000.0, GameState.gdp * 0.0035)
-		var mobilize_cost := maxf(8000000.0, GameState.gdp * 0.0018)
-		emergency_column.add_child(_button("FUND EMERGENCY RELIEF  •  %s" % _money(relief_cost), Color("#9b3f48"), func(): GameState.resolve_emergency_response("relief"); _show_dashboard()))
-		emergency_column.add_child(_button("MOBILIZE NATIONAL FORCES  •  %s" % _money(mobilize_cost), Color("#76513a"), func(): GameState.resolve_emergency_response("mobilize"); _show_dashboard()))
-		emergency_column.add_child(_button("DELAY RESPONSE  •  SAVE TREASURY", PANEL_ALT, func(): GameState.resolve_emergency_response("defer"); _show_dashboard()))
-	var main_row := VBoxContainer.new()
-	main_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main_row.add_theme_constant_override("separation", 12)
-	body.add_child(main_row)
+	stats.add_child(_stat_card("KAS NEGARA", _money(GameState.treasury), "DANA TERSEDIA"))
+	stats.add_child(_stat_card("PDB NASIONAL", _money(GameState.gdp), "OUTPUT EKONOMI"))
+	stats.add_child(_stat_card("POPULASI", _format_format_number(GameState.population), "PENDUDUK"))
+	stats.add_child(_stat_card("KEPUASAN PUBLIK", "%.1f%%" % GameState.government_approval, "DUKUNGAN PEMERINTAH"))
+
+	var mission_panel := PanelContainer.new()
+	mission_panel.add_theme_stylebox_override("panel", _style(PANEL, GOLD, 1, 12))
+	body.add_child(mission_panel)
+	var mission_col := VBoxContainer.new()
+	mission_col.add_theme_constant_override("separation", 6)
+	mission_panel.add_child(mission_col)
+	mission_col.add_child(_section_label("TARGET NASIONAL BERIKUTNYA"))
+	var objectives := GameState.get_national_objectives()
+	var next_objective: Dictionary = {}
+	for objective in objectives:
+		if not bool(objective.get("complete", false)):
+			next_objective = objective
+			break
+	if next_objective.is_empty():
+		mission_col.add_child(_muted_label("Semua target utama tercapai. Pertahankan kestabilan negara."))
+	else:
+		var mission_title := Label.new()
+		mission_title.text = str(next_objective.get("title", "Target negara"))
+		mission_title.add_theme_font_size_override("font_size", 16)
+		mission_title.add_theme_color_override("font_color", TEXT)
+		mission_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		mission_col.add_child(mission_title)
+		mission_col.add_child(_muted_label(str(next_objective.get("description", ""))))
+		var mission_progress := ProgressBar.new()
+		mission_progress.max_value = 100
+		mission_progress.value = float(next_objective.get("progress", 0))
+		mission_progress.show_percentage = false
+		mission_progress.custom_minimum_size.y = 10
+		mission_col.add_child(mission_progress)
+		mission_col.add_child(_muted_label(str(next_objective.get("value", ""))))
+
+	var actions_panel := PanelContainer.new()
+	actions_panel.add_theme_stylebox_override("panel", _style(PANEL, CYAN, 1, 12))
+	body.add_child(actions_panel)
+	var actions_col := VBoxContainer.new()
+	actions_col.add_theme_constant_override("separation", 7)
+	actions_panel.add_child(actions_col)
+	actions_col.add_child(_section_label("KEPUTUSAN PEMERINTAH  /  AKSI LANGSUNG"))
+	actions_col.add_child(_muted_label("Gunakan kas negara untuk membangun kapasitas dan meningkatkan layanan publik."))
+	var factory_cost := maxf(GameState.gdp * 0.002, 100000000.0)
+	var hospital_cost := maxf(GameState.gdp * 0.0012 * (1.0 + GameState.hospital_capacity / 100.0), 5000000.0)
+	var school_cost := maxf(GameState.gdp * 0.0009 * (1.0 + GameState.education_quality / 100.0), 3000000.0)
+	var quick_grid := GridContainer.new()
+	quick_grid.columns = 1
+	quick_grid.add_theme_constant_override("v_separation", 6)
+	actions_col.add_child(quick_grid)
+	quick_grid.add_child(_button("＋ BANGUN PABRIK  •  %s" % _money(factory_cost), BLUE, func():
+		if GameState.invest_in_factory():
+			_show_dashboard()
+		else:
+			_show_toast("Dana tidak cukup atau batas pabrik tercapai.")
+	))
+	quick_grid.add_child(_button("＋ BANGUN RUMAH SAKIT  •  %s" % _money(hospital_cost), GREEN, func():
+		if GameState.invest_in_public_service("hospital"):
+			_show_dashboard()
+		else:
+			_show_toast("Dana negara tidak cukup untuk membangun rumah sakit.")
+	))
+	quick_grid.add_child(_button("＋ BANGUN SEKOLAH  •  %s" % _money(school_cost), Color("#6a5bb5"), func():
+		if GameState.invest_in_public_service("school"):
+			_show_dashboard()
+		else:
+			_show_toast("Dana negara tidak cukup untuk membangun sekolah.")
+	))
+
 	var map_panel := PanelContainer.new()
-	map_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	map_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	map_panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
-	main_row.add_child(map_panel)
+	body.add_child(map_panel)
 	var map_column := VBoxContainer.new()
+	map_column.add_theme_constant_override("separation", 6)
 	map_panel.add_child(map_column)
-	var map_title := Label.new()
-	map_title.text = _id_text("WORLD INTELLIGENCE")
-	map_title.add_theme_color_override("font_color", CYAN)
-	map_title.add_theme_font_size_override("font_size", 11)
-	map_column.add_child(map_title)
+	map_column.add_child(_section_label("PETA DUNIA  /  SENTUH NEGARA UNTUK MELIHAT PROFIL"))
 	var map := Control.new()
 	map.set_script(load("res://scripts/world_map.gd"))
-	map.custom_minimum_size = Vector2(0, 360)
+	map.custom_minimum_size = Vector2(0, 245)
 	map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	map_column.add_child(map)
 	map.connect("country_selected", Callable(self, "_on_map_country_selected"))
-	var side := VBoxContainer.new()
-	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	side.add_theme_constant_override("separation", 10)
-	main_row.add_child(side)
-	side.add_child(_section_label("GOVERNMENT & SECURITY"))
-	var government_grid := GridContainer.new()
-	government_grid.columns = 2
-	government_grid.add_theme_constant_override("h_separation", 8)
-	government_grid.add_theme_constant_override("v_separation", 8)
-	side.add_child(government_grid)
-	government_grid.add_child(_button("National budget", PANEL_ALT, _show_budget))
-	government_grid.add_child(_button("World nations / AI", PANEL_ALT, _show_world_nations))
-	government_grid.add_child(_button("Cabinet & ministries", PANEL_ALT, _show_government))
-	government_grid.add_child(_button("Diplomacy", PANEL_ALT, _show_diplomacy))
-	government_grid.add_child(_button("Military & defense", PANEL_ALT, _show_military))
-	side.add_child(_section_label("ECONOMY & DEVELOPMENT"))
-	var development_grid := GridContainer.new()
-	development_grid.columns = 2
-	development_grid.add_theme_constant_override("h_separation", 8)
-	development_grid.add_theme_constant_override("v_separation", 8)
-	side.add_child(development_grid)
-	development_grid.add_child(_button("Infrastructure", PANEL_ALT, _show_infrastructure))
-	development_grid.add_child(_button("Cities & regions", PANEL_ALT, _show_cities))
-	development_grid.add_child(_button("Transport network", PANEL_ALT, _show_transport))
-	development_grid.add_child(_button("Industry & resources", PANEL_ALT, _show_industry))
-	development_grid.add_child(_button("Companies & jobs", PANEL_ALT, _show_companies))
-	development_grid.add_child(_button("Banking & central bank", PANEL_ALT, _show_banking))
-	development_grid.add_child(_button("Population & welfare", PANEL_ALT, _show_society))
-	development_grid.add_child(_button("International trade", PANEL_ALT, _show_trade))
-	development_grid.add_child(_button("Research & technology", PANEL_ALT, _show_research))
-	development_grid.add_child(_button("Energy & power", PANEL_ALT, _show_energy))
-	development_grid.add_child(_button("Mining", PANEL_ALT, _show_mining))
-	side.add_child(_section_label("NATIONAL SYSTEMS"))
-	var systems_grid := GridContainer.new()
-	systems_grid.columns = 2
-	systems_grid.add_theme_constant_override("h_separation", 8)
-	systems_grid.add_theme_constant_override("v_separation", 8)
-	side.add_child(systems_grid)
-	systems_grid.add_child(_button("Environment & disasters", PANEL_ALT, _show_environment))
-	systems_grid.add_child(_button("Space agency", PANEL_ALT, _show_space))
-	systems_grid.add_child(_button("Intelligence & cyber", PANEL_ALT, _show_intelligence))
-	systems_grid.add_child(_button("Immigration", PANEL_ALT, _show_immigration))
-	systems_grid.add_child(_button("Media & public opinion", PANEL_ALT, _show_media))
-	systems_grid.add_child(_button("Healthcare & education", PANEL_ALT, _show_public_services))
-	systems_grid.add_child(_button("Culture & tourism", PANEL_ALT, _show_tourism))
-	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
-	var note := Label.new()
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = _id_text("Simulasi ekonomi bulanan • 177 wilayah pada peta • estimasi data dasar historis (2019).")
-	note.add_theme_color_override("font_color", MUTED)
-	note.add_theme_font_size_override("font_size", 10)
-	body.add_child(note)
+
+	var nav_panel := PanelContainer.new()
+	nav_panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(nav_panel)
+	var nav_col := VBoxContainer.new()
+	nav_col.add_theme_constant_override("separation", 7)
+	nav_panel.add_child(nav_col)
+	nav_col.add_child(_section_label("PUSAT OPERASI"))
+	var nav_grid := GridContainer.new()
+	nav_grid.columns = 2
+	nav_grid.add_theme_constant_override("h_separation", 7)
+	nav_grid.add_theme_constant_override("v_separation", 7)
+	nav_col.add_child(nav_grid)
+	nav_grid.add_child(_button("KEUANGAN NEGARA", PANEL_ALT, _show_budget))
+	nav_grid.add_child(_button("KOTA & WILAYAH", PANEL_ALT, _show_cities))
+	nav_grid.add_child(_button("DIPLOMASI", PANEL_ALT, _show_diplomacy))
+	nav_grid.add_child(_button("MILITER", PANEL_ALT, _show_military))
+	nav_grid.add_child(_button("INDUSTRI", PANEL_ALT, _show_industry))
+	nav_grid.add_child(_button("RISET & TEKNOLOGI", PANEL_ALT, _show_research))
+	nav_grid.add_child(_button("PENDUDUK & LAYANAN", PANEL_ALT, _show_society))
+	nav_grid.add_child(_button("NEGARA DUNIA", PANEL_ALT, _show_world_nations))
+
+	var more := _button("SISTEM NASIONAL LAINNYA  ▾", Color("#263c52"), func(): _show_all_systems())
+	body.add_child(more)
+	if not GameState.active_emergency.is_empty():
+		var emergency := PanelContainer.new()
+		emergency.add_theme_stylebox_override("panel", _style(Color("#321d22"), Color("#e05b64"), 2, 12))
+		body.add_child(emergency)
+		var emergency_col := VBoxContainer.new()
+		emergency.add_child(emergency_col)
+		emergency_col.add_child(_section_label("KEADAAN DARURAT NASIONAL"))
+		emergency_col.add_child(_muted_label("Tingkat keparahan %.0f/100. Tentukan respons pemerintah." % float(GameState.active_emergency.get("severity", 0.0))))
+		emergency_col.add_child(_button("DANAI BANTUAN DARURAT", Color("#9b3f48"), func(): GameState.resolve_emergency_response("relief"); _show_dashboard()))
+		emergency_col.add_child(_button("KERAHKAN PASUKAN", Color("#76513a"), func(): GameState.resolve_emergency_response("mobilize"); _show_dashboard()))
+		
+	body.add_child(_muted_label("Simulasi berjalan offline. Satu hari permainan berlalu setiap 3 detik pada kecepatan 1x."))
 	GameState.state_changed.connect(_refresh_dashboard, CONNECT_ONE_SHOT)
+
+func _show_all_systems() -> void:
+	current_screen = "systems"
+	var body := _base("SISTEM NASIONAL", "Pilih bidang yang ingin dikelola.")
+	var groups := [
+		{"title":"PEMERINTAHAN & KEAMANAN","items":[["Anggaran negara", _show_budget],["Kabinet & kementerian", _show_government],["Diplomasi", _show_diplomacy],["Militer & pertahanan", _show_military],["Intelijen & siber", _show_intelligence]]},
+		{"title":"EKONOMI & PEMBANGUNAN","items":[["Infrastruktur", _show_infrastructure],["Kota & wilayah", _show_cities],["Jaringan transportasi", _show_transport],["Industri & sumber daya", _show_industry],["Perusahaan & pekerjaan", _show_companies],["Perbankan & bank sentral", _show_banking],["Perdagangan internasional", _show_trade],["Pertambangan", _show_mining],["Energi & listrik", _show_energy]]},
+		{"title":"MASYARAKAT & MASA DEPAN","items":[["Penduduk & kesejahteraan", _show_society],["Riset & teknologi", _show_research],["Imigrasi", _show_immigration],["Media & opini publik", _show_media],["Kesehatan & pendidikan", _show_public_services],["Lingkungan & bencana", _show_environment],["Antariksa", _show_space],["Budaya & pariwisata", _show_tourism]]}
+	]
+	for group in groups:
+		body.add_child(_section_label(str(group["title"])))
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 7)
+		grid.add_theme_constant_override("v_separation", 7)
+		body.add_child(grid)
+		for item in group["items"]:
+			grid.add_child(_button(str(item[0]), PANEL_ALT, item[1]))
+	body.add_child(_button("KEMBALI KE PUSAT KENDALI", BLUE, _show_dashboard))
 
 func _show_world_nations() -> void:
 	current_screen = "world"
