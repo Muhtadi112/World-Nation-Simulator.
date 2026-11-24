@@ -38,20 +38,20 @@ func _on_viewport_resized() -> void:
 			"industry": _show_industry()
 			"trade": _show_trade()
 			"infrastructure": _show_infrastructure()
-			"cities": _show_cities(),
+			"cities": _show_cities()
 			"transport": _show_transport()
 			"companies": _show_companies()
-			"banking": _show_banking(),
-			"government": _show_government(),
-			"research": _show_research(),
-			"environment": _show_environment(),
-			"energy": _show_energy(),
-			"mining": _show_mining(),
-			"space": _show_space(),
-			"intelligence": _show_intelligence(),
-			"immigration": _show_immigration(),
-			"media": _show_media(),
-			"services": _show_public_services(),
+			"banking": _show_banking()
+			"government": _show_government()
+			"research": _show_research()
+			"environment": _show_environment()
+			"energy": _show_energy()
+			"mining": _show_mining()
+			"space": _show_space()
+			"intelligence": _show_intelligence()
+			"immigration": _show_immigration()
+			"media": _show_media()
+			"services": _show_public_services()
 			"tourism": _show_tourism()
 
 func _clear() -> void:
@@ -1747,12 +1747,12 @@ func _show_government() -> void:
 	for party in parties:
 		var is_government := bool(party.get("government", false))
 		sections.add_child(_muted_label("%s  •  %s  •  %d seats  •  %.1f%% support%s" % [
-			str(party.get("name", "Party")), str(party.get("ideology", "Independent")),
-			int(party.get("seats", 0)), float(party.get("popularity", 0.0)),
+			str(party.get("name", "Party")), str(party.get("ideology", "Independent"))
+			int(party.get("seats", 0)), float(party.get("popularity", 0.0))
 			"  •  GOVERNMENT" if is_government else "  •  OPPOSITION"
 		]))
 	sections.add_child(_muted_label("Coalition status: %s. %s" % [
-		"MAJORITY" if GameState.government_has_majority() else "MINORITY",
+		"MAJORITY" if GameState.government_has_majority() else "MINORITY"
 		GameState.last_election_report
 	]))
 	sections.add_child(_button("CALL EARLY GENERAL ELECTION", GOLD, func():
@@ -1761,9 +1761,9 @@ func _show_government() -> void:
 	))
 	sections.add_child(_section_label("NATIONAL LEGISLATION"))
 	var laws := [
-		["education_act", "National Education Act", "Expand schools and improve social mobility"],
-		["healthcare_act", "Universal Healthcare Act", "Expand hospitals and social protection"],
-		["green_transition", "Green Transition Act", "Invest in power infrastructure and cleaner growth"],
+		["education_act", "National Education Act", "Expand schools and improve social mobility"]
+		["healthcare_act", "Universal Healthcare Act", "Expand hospitals and social protection"]
+		["green_transition", "Green Transition Act", "Invest in power infrastructure and cleaner growth"]
 		["infrastructure_act", "National Infrastructure Act", "Expand roads and airport capacity"]
 	]
 	for law in laws:

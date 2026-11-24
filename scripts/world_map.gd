@@ -128,7 +128,9 @@ func _gui_input(event: InputEvent) -> void:
 
 func _select_at(screen_position: Vector2) -> void:
 	var transform := _map_transform()
-	var map_point := (screen_position - transform.origin) / float(transform.scale)
+	var origin: Vector2 = transform["origin"]
+	var scale: float = transform["scale"]
+	var map_point: Vector2 = (screen_position - origin) / scale
 	for country_index in range(countries.size() - 1, -1, -1):
 		var country := countries[country_index]
 		for polygon in country.get("g", []):

@@ -3306,6 +3306,7 @@ func load_game() -> bool:
 	if political_parties.is_empty() or cabinet.is_empty():
 		_initialize_government()
 	if companies.is_empty() and not cities.is_empty():
+		_initialize_companies()
 	regional_funds = data.get("regional_funds", {})
 	selected_region_name = str(data.get("selected_region_name", ""))
 	if cities.is_empty() and not selected_country.is_empty():
