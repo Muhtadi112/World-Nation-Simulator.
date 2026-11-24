@@ -437,7 +437,7 @@ func _show_trade() -> void:
 			_show_toast("No active trade agreement. Establish one in Diplomacy first.")
 			return
 		var partner: Dictionary = trade_partners[partner_picker.selected]
-		var commodity := ["food", "energy", "metals", "goods"][commodity_picker.selected]
+		var commodity: String = ["food", "energy", "metals", "goods"][commodity_picker.selected]
 		var direction := "export" if direction_picker.selected == 0 else "import"
 		if GameState.trade_with_country(str(partner.get("id", "")), commodity, direction, units_input.value):
 			_show_trade()
@@ -772,7 +772,7 @@ func _show_transport() -> void:
 		var update_estimate := func() -> void:
 			var a := str(GameState.cities[from_picker.selected].get("id", ""))
 			var b := str(GameState.cities[to_picker.selected].get("id", ""))
-			var mode := ["road", "rail", "air", "sea"][mode_picker.selected]
+			var mode: String = ["road", "rail", "air", "sea"][mode_picker.selected]
 			var cost := GameState.transport_route_cost(a, b, mode)
 			estimate.text = "Estimated %s construction cost: %s" % [mode.to_upper(), _money(cost) if cost >= 0.0 else "Unavailable: build both terminals or check existing route"]
 		from_picker.item_selected.connect(func(_index: int): update_estimate.call())
@@ -934,7 +934,7 @@ func _show_tourism() -> void:
 	sections.add_child(_muted_label("Attractiveness %.1f  •  Capacity %.1f  •  Satisfaction %.1f  •  Safety %.1f" % [GameState.tourism_attractiveness, GameState.tourism_capacity, GameState.tourism_satisfaction, GameState.tourism_safety]))
 	sections.add_child(_muted_label("Visitors this month %s  •  Tourism employment %s  •  Monthly visitor spending %s  •  Monthly programme cost %s" % [_format_format_number(GameState.monthly_tourist_arrivals), _format_format_number(GameState.tourism_employment), _money(GameState.monthly_tourism_revenue), _money(GameState.monthly_tourism_cost)]))
 	for kind in ["heritage", "hotel", "transport", "district"]:
-		var title := {"heritage": "RESTORE HERITAGE SITES", "hotel": "BUILD HOTEL CAPACITY", "transport": "IMPROVE VISITOR TRANSPORT", "district": "DEVELOP CULTURAL DISTRICT"}[kind]
+		var title: String = str({"heritage": "RESTORE HERITAGE SITES", "hotel": "BUILD HOTEL CAPACITY", "transport": "IMPROVE VISITOR TRANSPORT", "district": "DEVELOP CULTURAL DISTRICT"}[kind])
 		sections.add_child(_button("%s  •  %s" % [title, _money(GameState.tourism_project_cost(kind))], BLUE, func(k: String = kind):
 			if GameState.invest_in_tourism(k):
 				_show_tourism()
@@ -1018,7 +1018,7 @@ func _show_media() -> void:
 	sections.add_child(_muted_label("TV stations: %d  •  Newspaper groups: %d  •  Digital networks: %d" % [GameState.tv_stations, GameState.newspaper_groups, GameState.digital_networks]))
 	sections.add_child(_muted_label("Misinformation pressure %.1f  •  Polarization %.1f  •  Press safety %.1f  •  Monthly public media cost %s" % [GameState.misinformation_pressure, GameState.public_polarization, GameState.press_safety, _money(GameState.monthly_media_cost)]))
 	for kind in ["tv", "newspaper", "digital"]:
-		var title := {"tv": "BUILD TV STATION", "newspaper": "ESTABLISH NEWSPAPER GROUP", "digital": "EXPAND DIGITAL NETWORK"}[kind]
+		var title: String = str({"tv": "BUILD TV STATION", "newspaper": "ESTABLISH NEWSPAPER GROUP", "digital": "EXPAND DIGITAL NETWORK"}[kind])
 		sections.add_child(_button("%s  •  %s" % [title, _money(GameState.media_investment_cost(kind))], BLUE, func(k: String = kind):
 			if GameState.invest_in_media(k):
 				_show_media()
@@ -1998,6 +1998,26 @@ func _show_companies() -> void:
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 
+func _show_infrastructure() -> void:
+	current_screen = "infrastructure"
+	_clear()
+	var heading := Label.new()
+	heading.text = "NATIONAL INFRASTRUCTURE"
+	heading.add_theme_font_size_override("font_size", 24)
+	heading.add_theme_color_override("font_color", TEXT)
+	add_child(heading)
+	var info := VBoxContainer.new()
+	info.position = Vector2(24, 70)
+	info.size = Vector2(maxf(size.x - 48.0, 300.0), maxf(size.y - 100.0, 400.0))
+	info.add_theme_constant_override("separation", 12)
+	add_child(info)
+	info.add_child(_stat_card("MONTHLY MAINTENANCE", _money(GameState.monthly_infrastructure_cost), "AUTOMATIC OPERATING COST"))
+	for key in ["roads", "power", "ports", "airports", "hospitals", "schools", "housing"]:
+		var level := int(GameState.infrastructure.get(key, 0))
+		info.add_child(_muted_label("%s  •  Level %d / 100" % [str(key).capitalize(), level]))
+	info.add_child(_muted_label("Infrastructure capacity affects economic growth, public services and national resilience."))
+	info.add_child(_button("BACK TO DASHBOARD", PANEL_ALT, _show_dashboard))
+
 func _show_cities() -> void:
 	current_screen = "cities"
 	var country: Dictionary = GameState.selected_country
@@ -2293,6 +2313,9 @@ func _format_format_number(value: int) -> String:
 	if value >= 1000:
 		return "%.1fK" % (float(value) / 1000.0)
 	return str(value)
+
+func _format_number(value: int) -> String:
+	return _format_format_number(value)
 
 func _money(value: float) -> String:
 	if value >= 1000000000000.0:

@@ -54,6 +54,7 @@ var skilled_workforce_share: float = 38.0
 var teachers: int = 0
 var public_services_report: String = "National health and education services established."
 var infrastructure: Dictionary = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
+var monthly_infrastructure_cost: float = 0.0
 var city_catalog: Array[Dictionary] = []
 var environment_budget_rate: float = 0.012
 var monthly_environment_cost: float = 0.0
@@ -126,6 +127,7 @@ var digital_networks: int = 1
 var media_report: String = "National media institutions established."
 var media_campaign_cooldown: int = 0
 var tourism_budget_rate: float = 0.004
+var monthly_tourism_cost: float = 0.0
 var tourism_attractiveness: float = 48.0
 var tourism_capacity: float = 35.0
 var tourism_satisfaction: float = 62.0
@@ -1043,6 +1045,16 @@ func _advance_day() -> void:
 		_run_ai_world_simulation()
 		_run_diplomacy_monthly_effects()
 	state_changed.emit()
+
+func _run_monthly_infrastructure() -> void:
+	var maintenance_rate := 0.0015
+	var total_level := 0.0
+	for key in ["roads", "power", "ports", "airports", "hospitals", "schools", "housing"]:
+		total_level += float(infrastructure.get(key, 0))
+	monthly_infrastructure_cost = maxf(0.0, gdp) * maintenance_rate * (total_level / 59.0)
+	var infrastructure_efficiency := clampf(total_level / 700.0, 0.0, 0.18)
+	annual_gdp_growth = clampf(annual_gdp_growth + infrastructure_efficiency * 0.015, -15.0, 20.0)
+	stability = clampf(stability + infrastructure_efficiency * 0.08, 0.0, 100.0)
 
 func _run_monthly_economy() -> void:
 	if gdp <= 0.0:
