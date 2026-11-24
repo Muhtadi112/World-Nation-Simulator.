@@ -48,7 +48,8 @@ func _on_viewport_resized() -> void:
 			"energy": _show_energy(),
 			"mining": _show_mining(),
 			"space": _show_space(),
-			"intelligence": _show_intelligence()
+			"intelligence": _show_intelligence(),
+			"immigration": _show_immigration()
 
 func _clear() -> void:
 	for child in get_children():
@@ -319,6 +320,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Mining & natural resources", PANEL_ALT, _show_mining))
 	side.add_child(_button("Space agency & exploration", PANEL_ALT, _show_space))
 	side.add_child(_button("Intelligence & cyber security", PANEL_ALT, _show_intelligence))
+	side.add_child(_button("Immigration & citizenship", PANEL_ALT, _show_immigration))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
@@ -836,6 +838,95 @@ func _show_transport() -> void:
 
 
 
+
+
+func _show_immigration() -> void:
+	current_screen = "immigration"
+	var body := _base("Immigration & citizenship", "MIGRATION POLICY  /  PASSPORTS  /  REFUGEE PROTECTION")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("POPULATION", _format_number(GameState.population), "TOTAL RESIDENTS"))
+	summary.add_child(_stat_card("IMMIGRANTS", _format_number(GameState.immigrant_population), "FOREIGN-BORN RESIDENTS"))
+	summary.add_child(_stat_card("FOREIGN-BORN SHARE", "%.1f%%" % GameState.foreign_born_share, "POPULATION COMPOSITION"))
+	summary.add_child(_stat_card("NET MIGRATION", _format_number(GameState.monthly_net_migration), "LAST MONTH"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("IMMIGRATION & VISA POLICY"))
+	var openness := HSlider.new()
+	openness.min_value = 0
+	openness.max_value = 100
+	openness.step = 5
+	openness.value = GameState.immigration_openness
+	sections.add_child(openness)
+	var openness_label := _muted_label("Visa and work-permit openness: %.0f / 100" % openness.value)
+	sections.add_child(openness_label)
+	openness.value_changed.connect(func(value: float): openness_label.text = "Visa and work-permit openness: %.0f / 100" % value)
+	sections.add_child(_button("APPLY VISA & WORK PERMIT POLICY", BLUE, func():
+		GameState.set_immigration_openness(openness.value)
+		_show_immigration()
+	))
+	sections.add_child(_section_label("REFUGEE & ASYLUM POLICY"))
+	var refugees := HSlider.new()
+	refugees.min_value = 0
+	refugees.max_value = 100
+	refugees.step = 5
+	refugees.value = GameState.refugee_acceptance_rate
+	sections.add_child(refugees)
+	var refugee_label := _muted_label("Refugee acceptance: %.0f / 100" % refugees.value)
+	sections.add_child(refugee_label)
+	refugees.value_changed.connect(func(value: float): refugee_label.text = "Refugee acceptance: %.0f / 100" % value)
+	sections.add_child(_button("APPLY REFUGEE POLICY", BLUE, func():
+		GameState.set_refugee_acceptance(refugees.value)
+		_show_immigration()
+	))
+	sections.add_child(_section_label("CITIZENSHIP & NATIONALITY"))
+	var citizenship := HSlider.new()
+	citizenship.min_value = 0
+	citizenship.max_value = 100
+	citizenship.step = 5
+	citizenship.value = GameState.citizenship_access
+	sections.add_child(citizenship)
+	var citizenship_label := _muted_label("Citizenship access: %.0f / 100" % citizenship.value)
+	sections.add_child(citizenship_label)
+	citizenship.value_changed.connect(func(value: float): citizenship_label.text = "Citizenship access: %.0f / 100" % value)
+	sections.add_child(_button("APPLY CITIZENSHIP RULES", BLUE, func():
+		GameState.set_citizenship_access(citizenship.value)
+		_show_immigration()
+	))
+	sections.add_child(_muted_label("Pending citizenship applications: %s  •  Granted: %s" % [_format_number(GameState.citizenship_applications), _format_number(GameState.citizenship_granted)]))
+	sections.add_child(_button("PROCESS CITIZENSHIP APPLICATIONS", GREEN, func():
+		if GameState.process_citizenship_applications():
+			_show_immigration()
+		else:
+			_show_toast("No eligible applications or insufficient treasury.")
+	))
+	sections.add_child(_section_label("BORDER & INTEGRATION CAPACITY"))
+	sections.add_child(_muted_label("Border security %.1f / 100  •  Integration capacity %.1f / 100" % [GameState.border_security, GameState.integration_capacity]))
+	sections.add_child(_button("STRENGTHEN BORDER SECURITY", PANEL_ALT, func():
+		if GameState.strengthen_border_security():
+			_show_immigration()
+		else:
+			_show_toast("Upgrade unavailable or insufficient treasury.")
+	))
+	sections.add_child(_button("INVEST IN SETTLEMENT & INTEGRATION", GREEN, func():
+		if GameState.invest_in_integration():
+			_show_immigration()
+		else:
+			_show_toast("Upgrade unavailable or insufficient treasury.")
+	))
+	sections.add_child(_section_label("MONTHLY MIGRATION REPORT"))
+	sections.add_child(_muted_label(GameState.immigration_report))
+	sections.add_child(_muted_label("Estimated monthly public-service and settlement cost: %s" % _money(GameState.monthly_immigration_cost)))
+	sections.add_child(_muted_label("Migration flows are simplified gameplay estimates. Visa, asylum and citizenship settings do not represent real legal procedures or official population statistics."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_intelligence() -> void:
 	current_screen = "intelligence"

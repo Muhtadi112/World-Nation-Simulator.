@@ -81,6 +81,18 @@ var monthly_intelligence_cost: float = 0.0
 var active_intelligence_operation: Dictionary = {}
 var intelligence_operation_log: Array[Dictionary] = []
 var intelligence_report: String = "No intelligence operations have been conducted."
+var immigration_openness: float = 50.0
+var refugee_acceptance_rate: float = 15.0
+var citizenship_access: float = 50.0
+var border_security: float = 55.0
+var integration_capacity: float = 45.0
+var immigrant_population: int = 0
+var foreign_born_share: float = 0.0
+var monthly_net_migration: int = 0
+var monthly_immigration_cost: float = 0.0
+var immigration_report: String = "No migration report available."
+var citizenship_applications: int = 0
+var citizenship_granted: int = 0
 
 var government_type: String = "Constitutional democracy"
 var government_approval: float = 58.0
@@ -972,6 +984,7 @@ func _advance_day() -> void:
 		_run_monthly_research()
 		_run_monthly_space_program()
 		_run_monthly_intelligence()
+		_run_monthly_immigration()
 		_run_monthly_environment()
 		_update_government_monthly()
 		_run_monthly_city_simulation()
@@ -2375,11 +2388,95 @@ func _run_monthly_intelligence() -> void:
 	_update_budget_forecast()
 	state_changed.emit()
 
+
+func set_immigration_openness(value: float) -> void:
+	immigration_openness = clampf(value, 0.0, 100.0)
+	_update_budget_forecast()
+	state_changed.emit()
+
+func set_refugee_acceptance(value: float) -> void:
+	refugee_acceptance_rate = clampf(value, 0.0, 100.0)
+	_update_budget_forecast()
+	state_changed.emit()
+
+func set_citizenship_access(value: float) -> void:
+	citizenship_access = clampf(value, 0.0, 100.0)
+	state_changed.emit()
+
+func strengthen_border_security() -> bool:
+	var cost := maxf(gdp * 0.00045, 18000000.0)
+	if treasury < cost or border_security >= 95.0:
+		return false
+	treasury -= cost
+	border_security = minf(100.0, border_security + 8.0)
+	integration_capacity = minf(100.0, integration_capacity + 1.5)
+	immigration_report = "Border management capacity strengthened."
+	state_changed.emit()
+	return true
+
+func invest_in_integration() -> bool:
+	var cost := maxf(gdp * 0.0005, 22000000.0)
+	if treasury < cost or integration_capacity >= 95.0:
+		return false
+	treasury -= cost
+	integration_capacity = minf(100.0, integration_capacity + 10.0)
+	immigration_report = "Language, employment and settlement integration capacity improved."
+	state_changed.emit()
+	return true
+
+func process_citizenship_applications() -> bool:
+	if citizenship_applications <= 0 or citizenship_access < 10.0:
+		return false
+	var approved := mini(citizenship_applications, maxi(1, int(float(citizenship_applications) * citizenship_access / 100.0 * 0.35)))
+	var cost := float(approved) * maxf(gdp / maxf(float(population), 1.0) * 0.018, 25.0)
+	if treasury < cost:
+		return false
+	treasury -= cost
+	citizenship_applications -= approved
+	citizenship_granted += approved
+	immigration_report = "%s citizenship applications approved. New citizens: %s." % [_format_number(approved), _format_number(approved)]
+	state_changed.emit()
+	return true
+
+func _run_monthly_immigration() -> void:
+	var arrivals := 0
+	var departures := 0
+	var refugee_arrivals := 0
+	var source_count := maxi(1, ai_countries.size())
+	var source_attractiveness := 0.0
+	var source_instability := 0.0
+	for nation in ai_countries:
+		var source_gdp_per_capita := float(nation.get("gdp", 1.0)) / maxf(float(nation.get("population", 1)), 1.0)
+		source_attractiveness += clampf(source_gdp_per_capita / maxf(gdp / maxf(float(population), 1.0), 1.0), 0.2, 2.0)
+		source_instability += maxf(0.0, 65.0 - float(nation.get("stability", 50.0)))
+	source_attractiveness /= float(source_count)
+	source_instability /= float(source_count)
+	var economic_pull := clampf(0.75 + annual_gdp_growth * 0.035 + (55.0 - unemployment) * 0.006, 0.35, 1.6)
+	var openness_factor := immigration_openness / 50.0
+	arrivals = int(float(population) * 0.000018 * openness_factor * economic_pull * source_attractiveness)
+	refugee_arrivals = int(float(population) * 0.0000008 * refugee_acceptance_rate / 15.0 * clampf(source_instability / 20.0, 0.2, 2.5))
+	departures = int(float(population) * 0.000006 * (1.0 - immigration_openness / 120.0) * clampf((unemployment - 4.0) / 8.0 + (50.0 - stability) / 100.0, 0.15, 1.8))
+	var admitted := maxi(0, arrivals + refugee_arrivals - departures)
+	monthly_net_migration = admitted - departures
+	population = maxi(1, population + monthly_net_migration)
+	immigrant_population = maxi(0, immigrant_population + admitted - int(float(immigrant_population) * 0.0004))
+	foreign_born_share = clampf(float(immigrant_population) / maxf(float(population), 1.0) * 100.0, 0.0, 100.0)
+	citizenship_applications += int(float(immigrant_population) * 0.00035 * citizenship_access / 50.0)
+	var service_pressure := float(immigrant_population) / maxf(float(population), 1.0) * 100.0
+	var integration_gap := maxf(0.0, service_pressure - integration_capacity * 0.45)
+	stability = clampf(stability + (integration_capacity - 45.0) * 0.001 - integration_gap * 0.008, 0.0, 100.0)
+	monthly_immigration_cost = float(admitted) * maxf(gdp / maxf(float(population), 1.0) * 0.025, 18.0) + gdp * 0.00008 * (refugee_acceptance_rate / 100.0)
+	if refugee_arrivals > 0:
+		immigration_report = "Monthly arrivals: %s • Refugees admitted: %s • Net migration: %s." % [_format_number(arrivals), _format_number(refugee_arrivals), _format_number(monthly_net_migration)]
+	else:
+		immigration_report = "Monthly arrivals: %s • Departures: %s • Net migration: %s." % [_format_number(arrivals), _format_number(departures), _format_number(monthly_net_migration)]
+	_update_budget_forecast()
+
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0 + maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
 	monthly_environment_cost = maxf(0.0, gdp) * environment_budget_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate + intelligence_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost + monthly_intelligence_cost
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate + intelligence_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost + monthly_intelligence_cost + monthly_immigration_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -2463,6 +2560,18 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	active_intelligence_operation.clear()
 	intelligence_operation_log.clear()
 	intelligence_report = "National intelligence and cyber security institutions established."
+	immigration_openness = 50.0
+	refugee_acceptance_rate = 15.0
+	citizenship_access = 50.0
+	border_security = 55.0
+	integration_capacity = 45.0
+	immigrant_population = int(float(population) * 0.04)
+	foreign_born_share = 4.0
+	monthly_net_migration = 0
+	monthly_immigration_cost = 0.0
+	immigration_report = "Immigration, border and citizenship institutions established."
+	citizenship_applications = 0
+	citizenship_granted = 0
 	_initialize_environment()
 	_initialize_energy()
 	_initialize_mining()
@@ -2521,6 +2630,12 @@ func save_game() -> bool:
 		"counterintelligence_rating": counterintelligence_rating, "national_threat_level": national_threat_level,
 		"monthly_intelligence_cost": monthly_intelligence_cost, "active_intelligence_operation": active_intelligence_operation,
 		"intelligence_operation_log": intelligence_operation_log, "intelligence_report": intelligence_report,
+		"immigration_openness": immigration_openness, "refugee_acceptance_rate": refugee_acceptance_rate,
+		"citizenship_access": citizenship_access, "border_security": border_security,
+		"integration_capacity": integration_capacity, "immigrant_population": immigrant_population,
+		"foreign_born_share": foreign_born_share, "monthly_net_migration": monthly_net_migration,
+		"monthly_immigration_cost": monthly_immigration_cost, "immigration_report": immigration_report,
+		"citizenship_applications": citizenship_applications, "citizenship_granted": citizenship_granted,
 		"environment_budget_rate": environment_budget_rate, "monthly_environment_cost": monthly_environment_cost,
 		"carbon_emissions": carbon_emissions, "air_pollution": air_pollution, "water_pollution": water_pollution,
 		"forest_cover": forest_cover, "climate_risk": climate_risk, "biodiversity": biodiversity,
@@ -2699,6 +2814,18 @@ func load_game() -> bool:
 		if typeof(operation_data) == TYPE_DICTIONARY:
 			intelligence_operation_log.append(operation_data)
 	intelligence_report = str(data.get("intelligence_report", "No intelligence operations have been conducted."))
+	immigration_openness = float(data.get("immigration_openness", 50.0))
+	refugee_acceptance_rate = float(data.get("refugee_acceptance_rate", 15.0))
+	citizenship_access = float(data.get("citizenship_access", 50.0))
+	border_security = float(data.get("border_security", 55.0))
+	integration_capacity = float(data.get("integration_capacity", 45.0))
+	immigrant_population = int(data.get("immigrant_population", int(float(population) * 0.04)))
+	foreign_born_share = float(data.get("foreign_born_share", float(immigrant_population) / maxf(float(population), 1.0) * 100.0))
+	monthly_net_migration = int(data.get("monthly_net_migration", 0))
+	monthly_immigration_cost = float(data.get("monthly_immigration_cost", 0.0))
+	immigration_report = str(data.get("immigration_report", "No migration report available."))
+	citizenship_applications = int(data.get("citizenship_applications", 0))
+	citizenship_granted = int(data.get("citizenship_granted", 0))
 	environment_budget_rate = float(data.get("environment_budget_rate", 0.012))
 	monthly_environment_cost = float(data.get("monthly_environment_cost", 0.0))
 	carbon_emissions = float(data.get("carbon_emissions", maxf(1.0, float(population) / 1000000.0 * 0.42)))
