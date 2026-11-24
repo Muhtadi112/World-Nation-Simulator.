@@ -1747,12 +1747,12 @@ func _show_government() -> void:
 	for party in parties:
 		var is_government := bool(party.get("government", false))
 		sections.add_child(_muted_label("%s  •  %s  •  %d seats  •  %.1f%% support%s" % [
-			str(party.get("name", "Party")), str(party.get("ideology", "Independent"))
-			int(party.get("seats", 0)), float(party.get("popularity", 0.0))
+			str(party.get("name", "Party")), str(party.get("ideology", "Independent")),
+			int(party.get("seats", 0)), float(party.get("popularity", 0.0)),
 			"  •  GOVERNMENT" if is_government else "  •  OPPOSITION"
 		]))
 	sections.add_child(_muted_label("Coalition status: %s. %s" % [
-		"MAJORITY" if GameState.government_has_majority() else "MINORITY"
+		"MAJORITY" if GameState.government_has_majority() else "MINORITY",
 		GameState.last_election_report
 	]))
 	sections.add_child(_button("CALL EARLY GENERAL ELECTION", GOLD, func():
@@ -1761,9 +1761,9 @@ func _show_government() -> void:
 	))
 	sections.add_child(_section_label("NATIONAL LEGISLATION"))
 	var laws := [
-		["education_act", "National Education Act", "Expand schools and improve social mobility"]
-		["healthcare_act", "Universal Healthcare Act", "Expand hospitals and social protection"]
-		["green_transition", "Green Transition Act", "Invest in power infrastructure and cleaner growth"]
+		["education_act", "National Education Act", "Expand schools and improve social mobility"],
+		["healthcare_act", "Universal Healthcare Act", "Expand hospitals and social protection"],
+		["green_transition", "Green Transition Act", "Invest in power infrastructure and cleaner growth"],
 		["infrastructure_act", "National Infrastructure Act", "Expand roads and airport capacity"]
 	]
 	for law in laws:

@@ -141,6 +141,7 @@ var tourism_employment: int = 0
 var heritage_sites: Array[Dictionary] = []
 var tourism_event_cooldown: int = 0
 var last_tourism_report: String = "Tourism programme established."
+var monthly_tourism_cost: float = 0.0
 
 var government_type: String = "Constitutional democracy"
 var government_approval: float = 58.0
@@ -294,7 +295,7 @@ func transport_route_cost(from_city_id: String, to_city_id: String, mode: String
 	for route in transport_routes:
 		if str(route.get("mode", "road")) == mode and ((str(route.get("from", "")) == from_city_id and str(route.get("to", "")) == to_city_id) or (str(route.get("from", "")) == to_city_id and str(route.get("to", "")) == from_city_id)):
 			return -1.0
-	var required_facility := {"rail": "rail_station", "air": "airport", "sea": "seaport"}.get(mode, "")
+	var required_facility: String = str({"rail": "rail_station", "air": "airport", "sea": "seaport"}.get(mode, ""))
 	if not required_facility.is_empty() and (int(from_city.get(required_facility, 0)) < 1 or int(to_city.get(required_facility, 0)) < 1):
 		return -1.0
 	var mode_multiplier := {"road": 180000.0, "rail": 320000.0, "air": 520000.0, "sea": 260000.0}
@@ -321,6 +322,13 @@ func build_transport_route(from_city_id: String, to_city_id: String, mode: Strin
 	state_changed.emit()
 	return true
 
+func _run_monthly_infrastructure() -> void:
+	var infrastructure_score := (float(infrastructure.get("roads", 0)) + float(infrastructure.get("power", 0)) + float(infrastructure.get("ports", 0)) + float(infrastructure.get("airports", 0))) / 400.0
+	for index in range(cities.size()):
+		var city: Dictionary = cities[index]
+		city["development_index"] = clampf(float(city.get("development_index", 25.0)) + infrastructure_score * 0.025, 0.0, 100.0)
+		cities[index] = city
+
 func _run_monthly_transport_simulation() -> void:
 	var city_route_counts: Dictionary = {}
 	var city_transport_scores: Dictionary = {}
@@ -332,9 +340,9 @@ func _run_monthly_transport_simulation() -> void:
 			continue
 		var mode := str(route.get("mode", "road"))
 		var road_level := maxi(1, int(route.get("road_level", 1)))
-		var mode_factor := {"road": 1.0, "rail": 0.55, "air": 0.18, "sea": 0.30}.get(mode, 1.0)
+		var mode_factor: float = float({"road": 1.0, "rail": 0.55, "air": 0.18, "sea": 0.30}.get(mode, 1.0))
 		var traffic := float(int(from_city.get("population", 0)) + int(to_city.get("population", 0))) * 0.025 * float(mode_factor)
-		var base_capacity := {"road": 80000.0, "rail": 150000.0, "air": 55000.0, "sea": 110000.0}.get(mode, 80000.0)
+		var base_capacity: float = float({"road": 80000.0, "rail": 150000.0, "air": 55000.0, "sea": 110000.0}.get(mode, 80000.0))
 		var capacity := float(base_capacity) * float(road_level)
 		var congestion := clampf((traffic / maxf(capacity, 1.0) - 0.65) * 100.0, 0.0, 100.0)
 		route["traffic"] = traffic
@@ -1610,7 +1618,7 @@ func _initialize_mining() -> void:
 	var seed_value := abs(country_id.hash())
 	for index in range(mining_resources.size()):
 		var resource := mining_resources[index]
-		var variation := 0.45 + float(posmod(seed_value / (index + 1) + index * 173, 1100)) / 1000.0
+		var variation: float = 0.45 + float(posmod(seed_value / (index + 1) + index * 173, 1100)) / 1000.0
 		resource_reserves[resource] = maxf(0.0, gdp / 1000000000.0 * variation * (1.0 + float(index % 4) * 0.35))
 		resource_inventory[resource] = 0.0
 		resource_production[resource] = 0.0
