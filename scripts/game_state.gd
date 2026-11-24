@@ -63,6 +63,14 @@ var active_research_id: String = ""
 var technology_tree: Array[Dictionary] = []
 var completed_technologies: Array[String] = []
 var research_report: String = "No technology projects completed yet."
+var space_agency_level: int = 1
+var space_centers: int = 0
+var operational_satellites: int = 0
+var space_program_budget_rate: float = 0.004
+var monthly_space_cost: float = 0.0
+var active_space_mission: Dictionary = {}
+var space_mission_log: Array[Dictionary] = []
+var space_report: String = "No national space missions have been launched."
 
 var government_type: String = "Constitutional democracy"
 var government_approval: float = 58.0
@@ -952,6 +960,7 @@ func _advance_day() -> void:
 		_run_monthly_banking_simulation()
 		_run_monthly_social_simulation()
 		_run_monthly_research()
+		_run_monthly_space_program()
 		_run_monthly_environment()
 		_update_government_monthly()
 		_run_monthly_city_simulation()
@@ -2110,15 +2119,114 @@ func _apply_technology_effect(technology_id: String) -> void:
 		"orbital_launch":
 			infrastructure["airports"] = mini(100, int(infrastructure.get("airports", 0)) + 1)
 			annual_gdp_growth += 0.1
+			space_agency_level = maxi(space_agency_level, 1)
 		"deep_space_missions":
 			social_mobility = minf(100.0, social_mobility + 2.0)
+	_update_budget_forecast()
+
+
+func space_center_cost() -> float:
+	if not completed_technologies.has("orbital_launch") or space_centers >= 5:
+		return -1.0
+	return maxf(gdp * (0.0025 + float(space_centers) * 0.0015), 90000000.0)
+
+func build_space_center() -> bool:
+	var cost := space_center_cost()
+	if cost < 0.0 or treasury < cost:
+		return false
+	treasury -= cost
+	space_centers += 1
+	space_agency_level = maxi(space_agency_level, 1)
+	space_report = "National space center commissioned. Launch operations are now available."
+	state_changed.emit()
+	return true
+
+func space_agency_upgrade_cost() -> float:
+	if space_agency_level >= 5:
+		return -1.0
+	return maxf(gdp * (0.0009 + float(space_agency_level) * 0.0007), 35000000.0)
+
+func upgrade_space_agency() -> bool:
+	var cost := space_agency_upgrade_cost()
+	if cost < 0.0 or treasury < cost or space_centers <= 0:
+		return false
+	treasury -= cost
+	space_agency_level += 1
+	space_report = "Space agency upgraded to level %d." % space_agency_level
+	state_changed.emit()
+	return true
+
+func set_space_program_budget(new_rate: float) -> void:
+	space_program_budget_rate = clampf(new_rate, 0.001, 0.03)
+	_update_budget_forecast()
+	state_changed.emit()
+
+func space_mission_catalog() -> Array[Dictionary]:
+	return [
+		{"id": "earth_observation", "name": "Earth Observation Satellite", "cost": 0.00045, "duration": 3, "tech": "orbital_launch", "reward": "Improves environmental monitoring and disaster resilience."},
+		{"id": "communications", "name": "National Communications Network", "cost": 0.00055, "duration": 4, "tech": "orbital_launch", "reward": "Expands satellite coverage and boosts economic productivity."},
+		{"id": "lunar_probe", "name": "Lunar Research Probe", "cost": 0.0009, "duration": 6, "tech": "deep_space_missions", "reward": "Advances national science and research capability."},
+		{"id": "mars_probe", "name": "Mars Exploration Mission", "cost": 0.0016, "duration": 9, "tech": "deep_space_missions", "reward": "A major prestige and scientific achievement."}
+	]
+
+func start_space_mission(mission_id: String) -> bool:
+	if space_centers <= 0 or not active_space_mission.is_empty():
+		return false
+	for mission in space_mission_catalog():
+		if str(mission.get("id", "")) != mission_id:
+			continue
+		var required_tech := str(mission.get("tech", "orbital_launch"))
+		if not completed_technologies.has(required_tech):
+			return false
+		var cost := maxf(gdp * float(mission.get("cost", 0.001)), 25000000.0)
+		if treasury < cost:
+			return false
+		treasury -= cost
+		active_space_mission = {
+			"id": mission_id, "name": str(mission.get("name", "Space mission")),
+			"duration": int(mission.get("duration", 3)), "progress": 0,
+			"cost": cost, "reward": str(mission.get("reward", "Scientific progress."))
+		}
+		space_report = "Mission launched: %s. Estimated completion: %d months." % [str(mission.get("name", mission_id)), int(mission.get("duration", 3))]
+		state_changed.emit()
+		return true
+	return false
+
+func _run_monthly_space_program() -> void:
+	monthly_space_cost = gdp * space_program_budget_rate / 12.0
+	if not active_space_mission.is_empty():
+		active_space_mission["progress"] = int(active_space_mission.get("progress", 0)) + 1
+		if int(active_space_mission.get("progress", 0)) >= int(active_space_mission.get("duration", 3)):
+			var mission_id := str(active_space_mission.get("id", ""))
+			var mission_name := str(active_space_mission.get("name", "Space mission"))
+			match mission_id:
+				"earth_observation":
+					operational_satellites += 1
+					disaster_resilience = minf(100.0, disaster_resilience + 8.0)
+					environmental_quality = minf(100.0, environmental_quality + 2.0)
+				"communications":
+					operational_satellites += 2
+					annual_gdp_growth += 0.18
+					stability = minf(100.0, stability + 1.0)
+				"lunar_probe":
+					research_points += 45.0
+					annual_gdp_growth += 0.08
+				"mars_probe":
+					research_points += 90.0
+					government_approval = minf(100.0, government_approval + 3.0)
+					stability = minf(100.0, stability + 1.5)
+			space_mission_log.append({"name": mission_name, "date": formatted_date(), "status": "SUCCESS"})
+			if space_mission_log.size() > 20:
+				space_mission_log.pop_front()
+			space_report = "Mission success: %s. %s" % [mission_name, str(active_space_mission.get("reward", ""))]
+			active_space_mission.clear()
 	_update_budget_forecast()
 
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0 + maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
 	monthly_environment_cost = maxf(0.0, gdp) * environment_budget_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -2184,6 +2292,14 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	_initialize_diplomacy()
 	_initialize_government()
 	_initialize_research()
+	space_agency_level = 1
+	space_centers = 0
+	operational_satellites = 0
+	space_program_budget_rate = 0.004
+	monthly_space_cost = 0.0
+	active_space_mission.clear()
+	space_mission_log.clear()
+	space_report = "No national space missions have been launched."
 	_initialize_environment()
 	_initialize_energy()
 	_initialize_mining()
@@ -2233,6 +2349,10 @@ func save_game() -> bool:
 		"scientists": scientists, "research_points": research_points,
 		"active_research_id": active_research_id, "technology_tree": technology_tree,
 		"completed_technologies": completed_technologies, "research_report": research_report,
+		"space_agency_level": space_agency_level, "space_centers": space_centers,
+		"operational_satellites": operational_satellites, "space_program_budget_rate": space_program_budget_rate,
+		"monthly_space_cost": monthly_space_cost, "active_space_mission": active_space_mission,
+		"space_mission_log": space_mission_log, "space_report": space_report,
 		"environment_budget_rate": environment_budget_rate, "monthly_environment_cost": monthly_environment_cost,
 		"carbon_emissions": carbon_emissions, "air_pollution": air_pollution, "water_pollution": water_pollution,
 		"forest_cover": forest_cover, "climate_risk": climate_risk, "biodiversity": biodiversity,
@@ -2387,6 +2507,17 @@ func load_game() -> bool:
 	for technology_id in data.get("completed_technologies", []):
 		completed_technologies.append(str(technology_id))
 	research_report = str(data.get("research_report", "No technology projects completed yet."))
+	space_agency_level = int(data.get("space_agency_level", 1))
+	space_centers = int(data.get("space_centers", 0))
+	operational_satellites = int(data.get("operational_satellites", 0))
+	space_program_budget_rate = float(data.get("space_program_budget_rate", 0.004))
+	monthly_space_cost = float(data.get("monthly_space_cost", 0.0))
+	active_space_mission = data.get("active_space_mission", {})
+	space_mission_log.clear()
+	for mission_data in data.get("space_mission_log", []):
+		if typeof(mission_data) == TYPE_DICTIONARY:
+			space_mission_log.append(mission_data)
+	space_report = str(data.get("space_report", "No national space missions have been launched."))
 	environment_budget_rate = float(data.get("environment_budget_rate", 0.012))
 	monthly_environment_cost = float(data.get("monthly_environment_cost", 0.0))
 	carbon_emissions = float(data.get("carbon_emissions", maxf(1.0, float(population) / 1000000.0 * 0.42)))

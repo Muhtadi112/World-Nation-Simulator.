@@ -46,7 +46,8 @@ func _on_viewport_resized() -> void:
 			"research": _show_research(),
 			"environment": _show_environment(),
 			"energy": _show_energy(),
-			"mining": _show_mining()
+			"mining": _show_mining(),
+			"space": _show_space()
 
 func _clear() -> void:
 	for child in get_children():
@@ -315,6 +316,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Environment & disasters", PANEL_ALT, _show_environment))
 	side.add_child(_button("Energy & power grid", PANEL_ALT, _show_energy))
 	side.add_child(_button("Mining & natural resources", PANEL_ALT, _show_mining))
+	side.add_child(_button("Space agency & exploration", PANEL_ALT, _show_space))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
@@ -830,6 +832,93 @@ func _show_transport() -> void:
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 
+
+
+func _show_space() -> void:
+	current_screen = "space"
+	var body := _base("Space agency & exploration", "NATIONAL SPACE PROGRAM  /  SATELLITES  /  DEEP SPACE")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("SPACE AGENCY", "LEVEL %d" % GameState.space_agency_level, "INSTITUTIONAL CAPACITY"))
+	summary.add_child(_stat_card("SPACE CENTERS", str(GameState.space_centers), "LAUNCH FACILITIES"))
+	summary.add_child(_stat_card("ACTIVE SATELLITES", str(GameState.operational_satellites), "ORBITAL ASSETS"))
+	summary.add_child(_stat_card("MONTHLY PROGRAM COST", _money(GameState.monthly_space_cost), "BUDGET ALLOCATION"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("SPACE INFRASTRUCTURE"))
+	if not GameState.completed_technologies.has("orbital_launch"):
+		sections.add_child(_muted_label("LOCKED: Complete Orbital Launch Systems in Research & Technology to establish a national space center."))
+	else:
+		sections.add_child(_button("BUILD SPACE CENTER  •  %s" % _money(GameState.space_center_cost()), GREEN, func():
+			if GameState.build_space_center():
+				_show_space()
+			else:
+				_show_toast("Cannot build: check orbital research, treasury and facility limit.")
+		))
+	sections.add_child(_button("UPGRADE SPACE AGENCY  •  %s" % _money(GameState.space_agency_upgrade_cost()), BLUE, func():
+		if GameState.upgrade_space_agency():
+			_show_space()
+		else:
+			_show_toast("Agency upgrade requires a space center and sufficient funds.")
+	))
+	sections.add_child(_section_label("PROGRAM FUNDING"))
+	var funding := HSlider.new()
+	funding.min_value = 0.1
+	funding.max_value = 3.0
+	funding.step = 0.1
+	funding.value = GameState.space_program_budget_rate * 100.0
+	sections.add_child(funding)
+	var funding_label := _muted_label("Space program budget: %.1f%% of GDP" % funding.value)
+	sections.add_child(funding_label)
+	funding.value_changed.connect(func(value: float): funding_label.text = "Space program budget: %.1f%% of GDP" % value)
+	sections.add_child(_button("APPLY SPACE BUDGET", BLUE, func():
+		GameState.set_space_program_budget(funding.value / 100.0)
+		_show_space()
+	))
+	sections.add_child(_section_label("MISSION CONTROL"))
+	if GameState.active_space_mission.is_empty():
+		sections.add_child(_muted_label("No active mission. Launch capacity and technology requirements must be met."))
+	else:
+		var mission: Dictionary = GameState.active_space_mission
+		var progress := float(mission.get("progress", 0)) / maxf(float(mission.get("duration", 1)), 1.0) * 100.0
+		sections.add_child(_muted_label("%s  •  MONTH %d / %d" % [str(mission.get("name", "Mission")), int(mission.get("progress", 0)), int(mission.get("duration", 1))]))
+		var bar := ProgressBar.new()
+		bar.max_value = 100.0
+		bar.value = progress
+		sections.add_child(bar)
+	if GameState.space_centers > 0:
+		for mission in GameState.space_mission_catalog():
+			var mission_id := str(mission.get("id", ""))
+			var required_tech := str(mission.get("tech", "orbital_launch"))
+			var unlocked := GameState.completed_technologies.has(required_tech)
+			var mission_cost := maxf(GameState.gdp * float(mission.get("cost", 0.001)), 25000000.0)
+			var label := "%s  •  %d months  •  %s" % [str(mission.get("name", "Mission")), int(mission.get("duration", 3)), _money(mission_cost)]
+			if unlocked and GameState.active_space_mission.is_empty():
+				sections.add_child(_button("LAUNCH  /  " + label, PANEL_ALT, func(id: String = mission_id):
+					if GameState.start_space_mission(id):
+						_show_space()
+					else:
+						_show_toast("Launch failed: check treasury or mission requirements.")
+				))
+			else:
+				sections.add_child(_muted_label(("LOCKED  /  " if not unlocked else "MISSION SLOT OCCUPIED  /  ") + label))
+	sections.add_child(_section_label("MISSION HISTORY"))
+	if GameState.space_mission_log.is_empty():
+		sections.add_child(_muted_label("No completed missions yet."))
+	else:
+		for record in GameState.space_mission_log:
+			sections.add_child(_muted_label("%s  •  %s  •  %s" % [str(record.get("date", "")), str(record.get("name", "")), str(record.get("status", ""))]))
+	sections.add_child(_muted_label("REPORT  /  " + GameState.space_report))
+	sections.add_child(_muted_label("Spaceflight is an abstract strategic simulation. Missions progress by month; costs, research rewards and satellite counts are gameplay values, not real launch schedules or engineering estimates."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_research() -> void:
 	current_screen = "research"
