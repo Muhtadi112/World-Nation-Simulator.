@@ -1018,7 +1018,7 @@ func _run_monthly_economy() -> void:
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
 	monthly_environment_cost = gdp * environment_budget_rate / 12.0
-	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate + media_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost + monthly_power_cost + monthly_media_cost
+	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate + media_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost + monthly_power_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 	treasury += monthly_balance
 	if treasury < 0.0:
@@ -2606,7 +2606,7 @@ func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0 + maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
 	monthly_environment_cost = maxf(0.0, gdp) * environment_budget_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate + intelligence_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost + monthly_intelligence_cost + monthly_immigration_cost
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate + intelligence_budget_rate + media_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost + monthly_intelligence_cost + monthly_immigration_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
