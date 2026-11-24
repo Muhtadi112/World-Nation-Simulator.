@@ -38,6 +38,21 @@ var household_consumption: float = 0.0
 var social_welfare_rate: float = 0.02
 var monthly_welfare_cost: float = 0.0
 var social_mobility: float = 50.0
+var healthcare_budget_rate: float = 0.035
+var education_budget_rate: float = 0.04
+var monthly_healthcare_cost: float = 0.0
+var monthly_education_cost: float = 0.0
+var hospital_capacity: float = 58.0
+var healthcare_access: float = 62.0
+var life_expectancy: float = 72.0
+var disease_burden: float = 32.0
+var health_workers: int = 0
+var school_enrollment: float = 78.0
+var adult_literacy: float = 86.0
+var education_quality: float = 55.0
+var skilled_workforce_share: float = 38.0
+var teachers: int = 0
+var public_services_report: String = "National health and education services established."
 var infrastructure: Dictionary = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 var city_catalog: Array[Dictionary] = []
 var environment_budget_rate: float = 0.012
@@ -998,6 +1013,7 @@ func _advance_day() -> void:
 		_run_monthly_company_simulation()
 		_run_monthly_banking_simulation()
 		_run_monthly_social_simulation()
+		_run_monthly_public_services()
 		_run_monthly_research()
 		_run_monthly_space_program()
 		_run_monthly_intelligence()
@@ -1018,7 +1034,7 @@ func _run_monthly_economy() -> void:
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
 	monthly_environment_cost = gdp * environment_budget_rate / 12.0
-	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate + media_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost + monthly_power_cost
+	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate + media_budget_rate + healthcare_budget_rate + education_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost + monthly_power_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 	treasury += monthly_balance
 	if treasury < 0.0:
@@ -2550,6 +2566,84 @@ func run_media_campaign(kind: String) -> bool:
 	state_changed.emit()
 	return true
 
+
+func _initialize_public_services() -> void:
+	healthcare_budget_rate = 0.035
+	education_budget_rate = 0.04
+	monthly_healthcare_cost = gdp * healthcare_budget_rate / 12.0
+	monthly_education_cost = gdp * education_budget_rate / 12.0
+	hospital_capacity = clampf(48.0 + float(infrastructure.get("hospitals", 8)) * 1.3, 20.0, 90.0)
+	healthcare_access = clampf(52.0 + float(infrastructure.get("hospitals", 8)) * 1.25, 20.0, 95.0)
+	disease_burden = 32.0
+	life_expectancy = clampf(65.0 + healthcare_access * 0.12 - disease_burden * 0.04, 55.0, 88.0)
+	health_workers = maxi(100, int(float(population) * 0.012))
+	school_enrollment = clampf(65.0 + float(infrastructure.get("schools", 10)) * 1.3, 45.0, 98.0)
+	adult_literacy = clampf(76.0 + float(infrastructure.get("schools", 10)) * 1.0, 55.0, 99.0)
+	education_quality = clampf(42.0 + float(infrastructure.get("schools", 10)) * 1.5, 25.0, 90.0)
+	skilled_workforce_share = 38.0
+	teachers = maxi(100, int(float(population) * 0.018))
+	public_services_report = "Public hospitals, clinics and education institutions are operating."
+
+func set_public_service_budgets(health_rate: float, education_rate: float) -> void:
+	healthcare_budget_rate = clampf(health_rate, 0.01, 0.10)
+	education_budget_rate = clampf(education_rate, 0.01, 0.12)
+	monthly_healthcare_cost = gdp * healthcare_budget_rate / 12.0
+	monthly_education_cost = gdp * education_budget_rate / 12.0
+	_update_budget_forecast()
+	state_changed.emit()
+
+func invest_in_public_service(kind: String) -> bool:
+	var cost := 0.0
+	if kind == "hospital":
+		cost = maxf(gdp * 0.0012 * (1.0 + hospital_capacity / 100.0), 5000000.0)
+	elif kind == "school":
+		cost = maxf(gdp * 0.0009 * (1.0 + education_quality / 100.0), 3000000.0)
+	else:
+		return false
+	if treasury < cost:
+		return false
+	treasury -= cost
+	if kind == "hospital":
+		infrastructure["hospitals"] = int(infrastructure.get("hospitals", 0)) + 1
+		hospital_capacity = clampf(hospital_capacity + 3.5, 0.0, 100.0)
+		healthcare_access = clampf(healthcare_access + 2.0, 0.0, 100.0)
+		health_workers += maxi(250, int(float(population) * 0.0003))
+		public_services_report = "A new public hospital opened, expanding capacity and access."
+	else:
+		infrastructure["schools"] = int(infrastructure.get("schools", 0)) + 1
+		education_quality = clampf(education_quality + 3.0, 0.0, 100.0)
+		school_enrollment = clampf(school_enrollment + 1.5, 0.0, 100.0)
+		teachers += maxi(300, int(float(population) * 0.0004))
+		public_services_report = "A new public school opened, improving education capacity."
+	_update_budget_forecast()
+	state_changed.emit()
+	return true
+
+func _run_monthly_public_services() -> void:
+	if population <= 0 or gdp <= 0.0:
+		return
+	monthly_healthcare_cost = gdp * healthcare_budget_rate / 12.0
+	monthly_education_cost = gdp * education_budget_rate / 12.0
+	var hospital_factor := clampf(float(infrastructure.get("hospitals", 0)) / maxf(float(population) / 1000000.0, 1.0), 0.2, 2.0)
+	var school_factor := clampf(float(infrastructure.get("schools", 0)) / maxf(float(population) / 1000000.0, 1.0), 0.2, 2.0)
+	healthcare_access = clampf(healthcare_access + (healthcare_budget_rate * 900.0 + hospital_factor * 0.18 - disease_burden * 0.012 - 1.1), 0.0, 100.0)
+	hospital_capacity = clampf(hospital_capacity + (healthcare_budget_rate * 700.0 + hospital_factor * 0.12 - 1.0), 0.0, 100.0)
+	var pollution_pressure := maxf(0.0, air_pollution - 25.0) * 0.018 + maxf(0.0, water_pollution - 25.0) * 0.012
+	disease_burden = clampf(disease_burden + pollution_pressure + (55.0 - healthcare_access) * 0.012 - healthcare_budget_rate * 28.0, 0.0, 100.0)
+	life_expectancy = clampf(life_expectancy + (healthcare_access - 60.0) * 0.0015 - disease_burden * 0.0008, 45.0, 90.0)
+	school_enrollment = clampf(school_enrollment + (education_budget_rate * 55.0 + school_factor * 0.14 - 1.4), 0.0, 100.0)
+	education_quality = clampf(education_quality + education_budget_rate * 22.0 + school_factor * 0.12 - 1.0, 0.0, 100.0)
+	adult_literacy = clampf(adult_literacy + (school_enrollment - 75.0) * 0.001 + (education_quality - 50.0) * 0.0008, 0.0, 100.0)
+	skilled_workforce_share = clampf(skilled_workforce_share + (education_quality - 50.0) * 0.006 + (school_enrollment - 70.0) * 0.003, 0.0, 100.0)
+	var health_staff_need := maxi(1, int(float(population) * 0.012))
+	var teacher_need := maxi(1, int(float(population) * 0.018))
+	health_workers = maxi(0, int(lerpf(float(health_workers), float(health_staff_need) * clampf(healthcare_access / 75.0, 0.5, 1.3), 0.04)))
+	teachers = maxi(0, int(lerpf(float(teachers), float(teacher_need) * clampf(school_enrollment / 80.0, 0.5, 1.3), 0.04)))
+	annual_gdp_growth += (skilled_workforce_share - 40.0) * 0.000015
+	stability = clampf(stability + (healthcare_access + education_quality - 110.0) * 0.0005, 0.0, 100.0)
+	public_services_report = "Health access %.1f • Life expectancy %.1f • School enrollment %.1f%% • Education quality %.1f." % [healthcare_access, life_expectancy, school_enrollment, education_quality]
+	_update_budget_forecast()
+
 func _run_monthly_media() -> void:
 	if media_campaign_cooldown > 0:
 		media_campaign_cooldown -= 1
@@ -2606,7 +2700,7 @@ func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0 + maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
 	monthly_environment_cost = maxf(0.0, gdp) * environment_budget_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate + intelligence_budget_rate + media_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost + monthly_intelligence_cost + monthly_immigration_cost
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate + intelligence_budget_rate + media_budget_rate + healthcare_budget_rate + education_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost + monthly_intelligence_cost + monthly_immigration_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -2660,6 +2754,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	social_welfare_rate = 0.02
 	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
 	social_mobility = 50.0
+	_initialize_public_services()
 	_update_budget_forecast()
 	transport_routes.clear()
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
@@ -2745,6 +2840,14 @@ func save_game() -> bool:
 		"income_inequality": income_inequality, "household_consumption": household_consumption,
 		"social_welfare_rate": social_welfare_rate, "monthly_welfare_cost": monthly_welfare_cost,
 		"social_mobility": social_mobility,
+		"healthcare_budget_rate": healthcare_budget_rate, "education_budget_rate": education_budget_rate,
+		"monthly_healthcare_cost": monthly_healthcare_cost, "monthly_education_cost": monthly_education_cost,
+		"hospital_capacity": hospital_capacity, "healthcare_access": healthcare_access,
+		"life_expectancy": life_expectancy, "disease_burden": disease_burden,
+		"health_workers": health_workers, "school_enrollment": school_enrollment,
+		"adult_literacy": adult_literacy, "education_quality": education_quality,
+		"skilled_workforce_share": skilled_workforce_share, "teachers": teachers,
+		"public_services_report": public_services_report,
 		"government_type": government_type, "government_approval": government_approval,
 		"governing_party_id": governing_party_id, "coalition_party_ids": coalition_party_ids,
 		"parliament_seats": parliament_seats, "months_until_election": months_until_election,
@@ -2898,6 +3001,21 @@ func load_game() -> bool:
 	social_welfare_rate = float(data.get("social_welfare_rate", 0.02))
 	monthly_welfare_cost = float(data.get("monthly_welfare_cost", gdp * social_welfare_rate / 12.0))
 	social_mobility = float(data.get("social_mobility", 50.0))
+	healthcare_budget_rate = float(data.get("healthcare_budget_rate", 0.035))
+	education_budget_rate = float(data.get("education_budget_rate", 0.04))
+	monthly_healthcare_cost = float(data.get("monthly_healthcare_cost", gdp * healthcare_budget_rate / 12.0))
+	monthly_education_cost = float(data.get("monthly_education_cost", gdp * education_budget_rate / 12.0))
+	hospital_capacity = float(data.get("hospital_capacity", 58.0))
+	healthcare_access = float(data.get("healthcare_access", 62.0))
+	life_expectancy = float(data.get("life_expectancy", 72.0))
+	disease_burden = float(data.get("disease_burden", 32.0))
+	health_workers = int(data.get("health_workers", int(float(population) * 0.012)))
+	school_enrollment = float(data.get("school_enrollment", 78.0))
+	adult_literacy = float(data.get("adult_literacy", 86.0))
+	education_quality = float(data.get("education_quality", 55.0))
+	skilled_workforce_share = float(data.get("skilled_workforce_share", 38.0))
+	teachers = int(data.get("teachers", int(float(population) * 0.018)))
+	public_services_report = str(data.get("public_services_report", "National health and education services loaded."))
 	government_type = str(data.get("government_type", "Constitutional democracy"))
 	government_approval = float(data.get("government_approval", 58.0))
 	governing_party_id = str(data.get("governing_party_id", ""))

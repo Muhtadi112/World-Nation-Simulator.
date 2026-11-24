@@ -50,7 +50,8 @@ func _on_viewport_resized() -> void:
 			"space": _show_space(),
 			"intelligence": _show_intelligence(),
 			"immigration": _show_immigration(),
-			"media": _show_media()
+			"media": _show_media(),
+			"services": _show_public_services()
 
 func _clear() -> void:
 	for child in get_children():
@@ -323,6 +324,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Intelligence & cyber security", PANEL_ALT, _show_intelligence))
 	side.add_child(_button("Immigration & citizenship", PANEL_ALT, _show_immigration))
 	side.add_child(_button("National media & public opinion", PANEL_ALT, _show_media))
+	side.add_child(_button("Healthcare & education", PANEL_ALT, _show_public_services))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
@@ -842,6 +844,70 @@ func _show_transport() -> void:
 
 
 
+
+
+func _show_public_services() -> void:
+	current_screen = "services"
+	var body := _base("Healthcare & education", "PUBLIC HEALTH  /  SCHOOLS  /  HUMAN CAPITAL")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("HEALTH ACCESS", "%.1f / 100" % GameState.healthcare_access, "POPULATION ACCESS"))
+	summary.add_child(_stat_card("LIFE EXPECTANCY", "%.1f YEARS" % GameState.life_expectancy, "SIMULATED INDICATOR"))
+	summary.add_child(_stat_card("SCHOOL ENROLLMENT", "%.1f%%" % GameState.school_enrollment, "EDUCATION ACCESS"))
+	summary.add_child(_stat_card("EDUCATION QUALITY", "%.1f / 100" % GameState.education_quality, "LEARNING OUTCOMES"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("PUBLIC HEALTH SYSTEM"))
+	sections.add_child(_muted_label("Hospital capacity %.1f  •  Disease burden %.1f  •  Health workers %s  •  Hospitals %d" % [GameState.hospital_capacity, GameState.disease_burden, _format_format_number(GameState.health_workers), int(GameState.infrastructure.get("hospitals", 0))]))
+	sections.add_child(_button("BUILD PUBLIC HOSPITAL  •  INVESTMENT %s" % _money(maxf(GameState.gdp * 0.0012 * (1.0 + GameState.hospital_capacity / 100.0), 5000000.0)), BLUE, func():
+		if GameState.invest_in_public_service("hospital"):
+			_show_public_services()
+		else:
+			_show_toast("Hospital project failed: insufficient treasury.")
+	))
+	sections.add_child(_section_label("EDUCATION SYSTEM"))
+	sections.add_child(_muted_label("Adult literacy %.1f%%  •  Skilled workforce %.1f%%  •  Teachers %s  •  Schools %d" % [GameState.adult_literacy, GameState.skilled_workforce_share, _format_format_number(GameState.teachers), int(GameState.infrastructure.get("schools", 0))]))
+	sections.add_child(_button("BUILD PUBLIC SCHOOL  •  INVESTMENT %s" % _money(maxf(GameState.gdp * 0.0009 * (1.0 + GameState.education_quality / 100.0), 3000000.0)), GREEN, func():
+		if GameState.invest_in_public_service("school"):
+			_show_public_services()
+		else:
+			_show_toast("School project failed: insufficient treasury.")
+	))
+	sections.add_child(_section_label("ANNUAL PUBLIC SERVICE BUDGET RATES"))
+	var health := HSlider.new()
+	health.min_value = 1.0
+	health.max_value = 10.0
+	health.step = 0.5
+	health.value = GameState.healthcare_budget_rate * 100.0
+	sections.add_child(health)
+	var health_label := _muted_label("Healthcare budget: %.1f%% GDP" % health.value)
+	sections.add_child(health_label)
+	health.value_changed.connect(func(v: float): health_label.text = "Healthcare budget: %.1f%% GDP" % v)
+	var education := HSlider.new()
+	education.min_value = 1.0
+	education.max_value = 12.0
+	education.step = 0.5
+	education.value = GameState.education_budget_rate * 100.0
+	sections.add_child(education)
+	var education_label := _muted_label("Education budget: %.1f%% GDP" % education.value)
+	sections.add_child(education_label)
+	education.value_changed.connect(func(v: float): education_label.text = "Education budget: %.1f%% GDP" % v)
+	sections.add_child(_button("APPLY HEALTH & EDUCATION BUDGET", GREEN, func():
+		GameState.set_public_service_budgets(health.value / 100.0, education.value / 100.0)
+		_show_public_services()
+	))
+	sections.add_child(_muted_label("Monthly health spending %s  •  Monthly education spending %s" % [_money(GameState.monthly_healthcare_cost), _money(GameState.monthly_education_cost)]))
+	sections.add_child(_muted_label(GameState.public_services_report))
+	sections.add_child(_muted_label("All public health and education figures are simplified fictional gameplay indicators, not medical advice or official national statistics."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_media() -> void:
 	current_screen = "media"
