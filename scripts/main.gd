@@ -21,7 +21,31 @@ var country_results: VBoxContainer
 var selected_diplomacy_id: String = ""
 
 func _ready() -> void:
+	# Render a guaranteed startup surface before building the dynamic UI.
+	RenderingServer.set_default_clear_color(BG)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	get_viewport().size_changed.connect(_on_viewport_resized)
+	var boot := ColorRect.new()
+	boot.name = "StartupBackground"
+	boot.color = BG
+	boot.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	boot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(boot)
+	var boot_label := Label.new()
+	boot_label.name = "StartupStatus"
+	boot_label.text = "WORLD NATION SIMULATOR\\nInitializing world systems..."
+	boot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	boot_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	boot_label.add_theme_color_override("font_color", CYAN)
+	boot_label.add_theme_font_size_override("font_size", 24)
+	boot_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(boot_label)
+	call_deferred("_finish_startup")
+
+func _finish_startup() -> void:
+	if not is_inside_tree():
+		return
 	_show_home()
 
 func _on_viewport_resized() -> void:
