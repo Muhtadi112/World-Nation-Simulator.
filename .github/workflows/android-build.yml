@@ -56,9 +56,19 @@ jobs:
           EOF
 
       - name: Import and validate Godot project
+        shell: bash
         run: |
-          godot --headless --editor --path . --quit
-          godot --headless --path . --quit-after 3
+          set -o pipefail
+          godot --headless --editor --path . --quit 2>&1 | tee /tmp/godot-import.log
+          if grep -E "SCRIPT ERROR:|Parse Error:|Failed to load script" /tmp/godot-import.log; then
+            echo "Godot script validation failed."
+            exit 1
+          fi
+          godot --headless --path . --quit-after 3 2>&1 | tee /tmp/godot-runtime.log
+          if grep -E "SCRIPT ERROR:|Parse Error:|Failed to load script" /tmp/godot-runtime.log; then
+            echo "Godot runtime validation failed."
+            exit 1
+          fi
 
       - name: Export Android debug APK
         run: |
