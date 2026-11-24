@@ -11,6 +11,7 @@ const ZOOM_MAX := 4.0
 var zoom := 1.0
 var pan := Vector2.ZERO
 var countries: Array[Dictionary] = []
+var cities: Array[Dictionary] = []
 var selected_iso := ""
 var _dragging := false
 var _press_position := Vector2.ZERO
@@ -20,6 +21,7 @@ var _did_drag := false
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_load_countries()
+	_load_cities()
 	queue_redraw()
 
 func _load_countries() -> void:
@@ -41,6 +43,21 @@ func _load_countries() -> void:
 	for row in rows:
 		if typeof(row) == TYPE_DICTIONARY:
 			countries.append(row)
+
+func _load_cities() -> void:
+	var file := FileAccess.open("res://data/world_cities.json", FileAccess.READ)
+	if file == null:
+		push_warning("World city catalogue is unavailable.")
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	var rows: Variant = parsed.get("cities", [])
+	if typeof(rows) == TYPE_ARRAY:
+		for row in rows:
+			if typeof(row) == TYPE_DICTIONARY:
+				cities.append(row)
 
 func _map_transform() -> Dictionary:
 	var fit := minf(size.x / MAP_SIZE.x, size.y / MAP_SIZE.y)
@@ -77,6 +94,16 @@ func _draw() -> void:
 					hole.append(_project(float(coordinate[0]), float(coordinate[1])))
 				if hole.size() > 2:
 					draw_polyline(hole, Color("#47788a"), 0.55, true)
+
+	# Major city network from Business Cargo Simulator's WGS84 world-city catalogue.
+	for city in cities:
+		var point := Vector2(float(city.get("mapX", 0.5)) * MAP_SIZE.x, float(city.get("mapY", 0.5)) * MAP_SIZE.y)
+		var tier := int(city.get("tier", 3))
+		var marker_color := Color("#5de4c7") if tier == 1 else (Color("#50b8d8") if tier == 2 else Color("#8aa9bd"))
+		draw_circle(point, 2.2 if tier == 1 else 1.45, marker_color)
+		if zoom >= 1.35 and tier <= 2:
+			draw_string(ThemeDB.fallback_font, point + Vector2(5, -4), str(city.get("name", "")), HORIZONTAL_ALIGNMENT_LEFT, 110, 9, Color("#d9edf5"))
+
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	draw_string(ThemeDB.fallback_font, Vector2(14, size.y - 14), "NATURAL EARTH  •  %d COUNTRIES / AREAS  •  DRAG & ZOOM" % countries.size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#8ba8bb"))
 	draw_string(ThemeDB.fallback_font, Vector2(size.x - 72, 22), "%d%%" % int(zoom * 100.0), HORIZONTAL_ALIGNMENT_RIGHT, 58, 11, Color("#29d6e8"))
