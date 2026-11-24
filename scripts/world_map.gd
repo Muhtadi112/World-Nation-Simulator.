@@ -7,6 +7,8 @@ const DATA_PATH := "res://data/countries_110m.json"
 const MAP_SIZE := Vector2(800.0, 410.0)
 const ZOOM_MIN := 0.7
 const ZOOM_MAX := 4.0
+const CONTROL_SIZE := Vector2(42.0, 34.0)
+const CONTROL_GAP := 6.0
 
 var zoom := 1.0
 var pan := Vector2.ZERO
@@ -107,7 +109,37 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	draw_string(ThemeDB.fallback_font, Vector2(14, size.y - 14), "NATURAL EARTH  •  %d COUNTRIES / AREAS  •  DRAG & ZOOM" % countries.size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#8ba8bb"))
 	draw_string(ThemeDB.fallback_font, Vector2(size.x - 72, 22), "%d%%" % int(zoom * 100.0), HORIZONTAL_ALIGNMENT_RIGHT, 58, 11, Color("#29d6e8"))
+	# Touch controls for phones without a mouse wheel.
+	var controls_origin := Vector2(size.x - (CONTROL_SIZE.x * 3.0 + CONTROL_GAP * 2.0) - 10.0, size.y - CONTROL_SIZE.y - 28.0)
+	for index in range(3):
+		var rect := Rect2(controls_origin + Vector2(index * (CONTROL_SIZE.x + CONTROL_GAP), 0), CONTROL_SIZE)
+		draw_style_box(_control_style(), rect)
+		var glyph := "+" if index == 0 else ("−" if index == 1 else "↺")
+		draw_string(ThemeDB.fallback_font, rect.position + Vector2(0, 23), glyph, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 20, Color("#eaf7ff"))
 
+func _control_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#16364b")
+	style.border_color = Color("#29d6e8")
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(7)
+	return style
+
+func _handle_map_control(position: Vector2) -> bool:
+	var origin := Vector2(size.x - (CONTROL_SIZE.x * 3.0 + CONTROL_GAP * 2.0) - 10.0, size.y - CONTROL_SIZE.y - 28.0)
+	for index in range(3):
+		var rect := Rect2(origin + Vector2(index * (CONTROL_SIZE.x + CONTROL_GAP), 0), CONTROL_SIZE)
+		if rect.has_point(position):
+			if index == 0:
+				_zoom_at(size * 0.5, 1.25)
+			elif index == 1:
+				_zoom_at(size * 0.5, 0.8)
+			else:
+				zoom = 1.0
+				pan = Vector2.ZERO
+				queue_redraw()
+			return true
+	return false
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
@@ -117,7 +149,7 @@ func _gui_input(event: InputEvent) -> void:
 				_press_position = event.position
 				_last_pointer = event.position
 			else:
-				if _dragging and not _did_drag:
+				if _dragging and not _did_drag and not _handle_map_control(event.position):
 					_select_at(event.position)
 				_dragging = false
 			accept_event()
