@@ -1266,7 +1266,8 @@ func _run_diplomacy_monthly_effects() -> void:
 
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate) / 12.0
+	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate) / 12.0
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -1320,6 +1321,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	social_welfare_rate = 0.02
 	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
 	social_mobility = 50.0
+	_update_budget_forecast()
 	transport_routes.clear()
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
 	tanks = maxi(100, int(gdp / 1800000000.0))
