@@ -93,6 +93,8 @@ var monthly_immigration_cost: float = 0.0
 var immigration_report: String = "No migration report available."
 var citizenship_applications: int = 0
 var citizenship_granted: int = 0
+var passport_access: float = 60.0
+var passports_issued: int = 0
 
 var government_type: String = "Constitutional democracy"
 var government_approval: float = 58.0
@@ -2438,6 +2440,24 @@ func process_citizenship_applications() -> bool:
 	state_changed.emit()
 	return true
 
+func set_passport_access(value: float) -> void:
+	passport_access = clampf(value, 0.0, 100.0)
+	state_changed.emit()
+
+func issue_passports() -> bool:
+	var eligible := maxi(0, population - immigrant_population)
+	var batch := mini(maxi(0, int(float(eligible) * 0.015 * passport_access / 100.0)), maxi(0, eligible - passports_issued))
+	if batch <= 0:
+		return false
+	var cost := float(batch) * maxf(gdp / maxf(float(population), 1.0) * 0.004, 8.0)
+	if treasury < cost:
+		return false
+	treasury -= cost
+	passports_issued += batch
+	immigration_report = "%s new passports issued. Total registered passports: %s." % [_format_trade_units(batch), _format_trade_units(passports_issued)]
+	state_changed.emit()
+	return true
+
 func _run_monthly_immigration() -> void:
 	var arrivals := 0
 	var departures := 0
@@ -2456,8 +2476,8 @@ func _run_monthly_immigration() -> void:
 	arrivals = int(float(population) * 0.000018 * openness_factor * economic_pull * source_attractiveness)
 	refugee_arrivals = int(float(population) * 0.0000008 * refugee_acceptance_rate / 15.0 * clampf(source_instability / 20.0, 0.2, 2.5))
 	departures = int(float(population) * 0.000006 * (1.0 - immigration_openness / 120.0) * clampf((unemployment - 4.0) / 8.0 + (50.0 - stability) / 100.0, 0.15, 1.8))
-	var admitted := maxi(0, arrivals + refugee_arrivals - departures)
-	monthly_net_migration = admitted - departures
+	var admitted := maxi(0, arrivals + refugee_arrivals - int(float(departures) * border_security / 100.0 * 0.35))
+	monthly_net_migration = arrivals + refugee_arrivals - departures
 	population = maxi(1, population + monthly_net_migration)
 	immigrant_population = maxi(0, immigrant_population + admitted - int(float(immigrant_population) * 0.0004))
 	foreign_born_share = clampf(float(immigrant_population) / maxf(float(population), 1.0) * 100.0, 0.0, 100.0)
@@ -2572,6 +2592,8 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	immigration_report = "Immigration, border and citizenship institutions established."
 	citizenship_applications = 0
 	citizenship_granted = 0
+	passport_access = 60.0
+	passports_issued = 0
 	_initialize_environment()
 	_initialize_energy()
 	_initialize_mining()
@@ -2636,6 +2658,7 @@ func save_game() -> bool:
 		"foreign_born_share": foreign_born_share, "monthly_net_migration": monthly_net_migration,
 		"monthly_immigration_cost": monthly_immigration_cost, "immigration_report": immigration_report,
 		"citizenship_applications": citizenship_applications, "citizenship_granted": citizenship_granted,
+		"passport_access": passport_access, "passports_issued": passports_issued,
 		"environment_budget_rate": environment_budget_rate, "monthly_environment_cost": monthly_environment_cost,
 		"carbon_emissions": carbon_emissions, "air_pollution": air_pollution, "water_pollution": water_pollution,
 		"forest_cover": forest_cover, "climate_risk": climate_risk, "biodiversity": biodiversity,
@@ -2826,6 +2849,8 @@ func load_game() -> bool:
 	immigration_report = str(data.get("immigration_report", "No migration report available."))
 	citizenship_applications = int(data.get("citizenship_applications", 0))
 	citizenship_granted = int(data.get("citizenship_granted", 0))
+	passport_access = float(data.get("passport_access", 60.0))
+	passports_issued = int(data.get("passports_issued", 0))
 	environment_budget_rate = float(data.get("environment_budget_rate", 0.012))
 	monthly_environment_cost = float(data.get("monthly_environment_cost", 0.0))
 	carbon_emissions = float(data.get("carbon_emissions", maxf(1.0, float(population) / 1000000.0 * 0.42)))

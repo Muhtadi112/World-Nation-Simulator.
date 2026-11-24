@@ -908,6 +908,27 @@ func _show_immigration() -> void:
 		else:
 			_show_toast("No eligible applications or insufficient treasury.")
 	))
+	sections.add_child(_section_label("PASSPORT SERVICES"))
+	var passport_slider := HSlider.new()
+	passport_slider.min_value = 0
+	passport_slider.max_value = 100
+	passport_slider.step = 5
+	passport_slider.value = GameState.passport_access
+	sections.add_child(passport_slider)
+	var passport_label := _muted_label("Passport service access: %.0f / 100" % passport_slider.value)
+	sections.add_child(passport_label)
+	passport_slider.value_changed.connect(func(value: float): passport_label.text = "Passport service access: %.0f / 100" % value)
+	sections.add_child(_button("APPLY PASSPORT SERVICE POLICY", BLUE, func():
+		GameState.set_passport_access(passport_slider.value)
+		_show_immigration()
+	))
+	sections.add_child(_muted_label("Passports issued: %s" % _format_format_number(GameState.passports_issued)))
+	sections.add_child(_button("ISSUE PASSPORTS TO ELIGIBLE CITIZENS", GREEN, func():
+		if GameState.issue_passports():
+			_show_immigration()
+		else:
+			_show_toast("Passport issuance unavailable or insufficient treasury.")
+	))
 	sections.add_child(_section_label("BORDER & INTEGRATION CAPACITY"))
 	sections.add_child(_muted_label("Border security %.1f / 100  •  Integration capacity %.1f / 100" % [GameState.border_security, GameState.integration_capacity]))
 	sections.add_child(_button("STRENGTHEN BORDER SECURITY", PANEL_ALT, func():
