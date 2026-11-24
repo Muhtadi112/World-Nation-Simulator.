@@ -938,7 +938,8 @@ const CURRENCIES := {
 }
 
 func _ready() -> void:
-	load_country_catalog()
+	# Keep autoload startup lightweight; load the country database only when requested.
+	pass
 
 func load_country_catalog() -> void:
 	country_catalog.clear()
