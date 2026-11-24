@@ -40,6 +40,21 @@ var monthly_welfare_cost: float = 0.0
 var social_mobility: float = 50.0
 var infrastructure: Dictionary = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 var city_catalog: Array[Dictionary] = []
+var environment_budget_rate: float = 0.012
+var monthly_environment_cost: float = 0.0
+var carbon_emissions: float = 0.0
+var air_pollution: float = 35.0
+var water_pollution: float = 28.0
+var forest_cover: float = 32.0
+var climate_risk: float = 24.0
+var biodiversity: float = 65.0
+var environmental_quality: float = 62.0
+var renewable_energy_share: float = 18.0
+var disaster_resilience: float = 42.0
+var disaster_cooldown: int = 0
+var disaster_history: Array[Dictionary] = []
+var last_disaster_report: String = "No major natural disasters recorded."
+
 var research_budget_rate: float = 0.015
 var research_labs: int = 1
 var scientists: int = 1200
@@ -911,6 +926,7 @@ func _advance_day() -> void:
 		_run_monthly_banking_simulation()
 		_run_monthly_social_simulation()
 		_run_monthly_research()
+		_run_monthly_environment()
 		_update_government_monthly()
 		_run_monthly_city_simulation()
 		_update_market_prices()
@@ -924,7 +940,8 @@ func _run_monthly_economy() -> void:
 	monthly_revenue = gdp * tax_rate / 12.0
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
-	monthly_expenses = gdp * (spending_rate + research_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost
+	monthly_environment_cost = gdp * environment_budget_rate / 12.0
+	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 	treasury += monthly_balance
 	if treasury < 0.0:
@@ -1459,6 +1476,136 @@ func hold_election(early: bool = true) -> bool:
 	state_changed.emit()
 	return true
 
+func _initialize_environment() -> void:
+	environment_budget_rate = 0.012
+	monthly_environment_cost = gdp * environment_budget_rate / 12.0
+	carbon_emissions = maxf(1.0, float(population) / 1000000.0 * 0.42 + industrial_output / 1000000000.0 * 0.08)
+	air_pollution = clampf(28.0 + industrial_capacity * 90.0, 10.0, 90.0)
+	water_pollution = clampf(22.0 + industrial_capacity * 65.0, 8.0, 85.0)
+	forest_cover = 24.0 + float(abs(str(selected_country.get("id", "AAA")).hash()) % 3500) / 100.0
+	forest_cover = clampf(forest_cover, 12.0, 58.0)
+	climate_risk = clampf(18.0 + (100.0 - forest_cover) * 0.32 + industrial_capacity * 55.0, 8.0, 72.0)
+	biodiversity = clampf(45.0 + forest_cover * 0.75 - air_pollution * 0.18, 10.0, 95.0)
+	environmental_quality = clampf(100.0 - air_pollution * 0.42 - water_pollution * 0.30 + forest_cover * 0.18, 10.0, 95.0)
+	renewable_energy_share = clampf(12.0 + float(infrastructure.get("power", 10)) * 0.45, 5.0, 55.0)
+	disaster_resilience = clampf(28.0 + float(infrastructure.get("roads", 12)) * 0.7 + float(infrastructure.get("hospitals", 8)) * 1.1 + float(infrastructure.get("housing", 12)) * 0.55, 15.0, 85.0)
+	disaster_cooldown = 0
+	disaster_history.clear()
+	last_disaster_report = "No major natural disasters recorded."
+	_update_budget_forecast()
+
+func set_environment_budget(new_rate: float) -> void:
+	environment_budget_rate = clampf(new_rate, 0.002, 0.06)
+	_update_budget_forecast()
+	state_changed.emit()
+
+func environment_project_cost(project_id: String) -> float:
+	var multipliers := {"reforestation": 0.00045, "pollution_cleanup": 0.00055, "renewable_transition": 0.0011, "flood_defense": 0.0008, "disaster_preparedness": 0.0005}
+	if not multipliers.has(project_id):
+		return -1.0
+	return maxf(gdp * float(multipliers[project_id]), 20000000.0)
+
+func invest_in_environment_project(project_id: String) -> bool:
+	var cost := environment_project_cost(project_id)
+	if cost < 0.0 or treasury < cost:
+		return false
+	treasury -= cost
+	match project_id:
+		"reforestation":
+			forest_cover = minf(85.0, forest_cover + 1.8)
+			biodiversity = minf(100.0, biodiversity + 1.5)
+			climate_risk = maxf(5.0, climate_risk - 1.2)
+		"pollution_cleanup":
+			air_pollution = maxf(3.0, air_pollution - 5.0)
+			water_pollution = maxf(3.0, water_pollution - 4.0)
+			environmental_quality = minf(100.0, environmental_quality + 4.0)
+		"renewable_transition":
+			renewable_energy_share = minf(95.0, renewable_energy_share + 5.0)
+			carbon_emissions = maxf(0.0, carbon_emissions * 0.96)
+			air_pollution = maxf(0.0, air_pollution - 1.2)
+		"flood_defense":
+			disaster_resilience = minf(100.0, disaster_resilience + 8.0)
+			climate_risk = maxf(5.0, climate_risk - 0.8)
+		"disaster_preparedness":
+			disaster_resilience = minf(100.0, disaster_resilience + 12.0)
+			stability = minf(100.0, stability + 1.0)
+	last_disaster_report = "Environmental project completed: %s." % project_id.replace("_", " ").capitalize()
+	state_changed.emit()
+	return true
+
+func _run_monthly_environment() -> void:
+	if gdp <= 0.0:
+		return
+	monthly_environment_cost = gdp * environment_budget_rate / 12.0
+	var industrial_pressure := industrial_capacity * 100.0 + float(factory_count) * 0.012
+	var population_pressure := float(population) / maxf(gdp / 1000000000.0, 1.0) * 0.00002
+	var emissions_growth := 0.0015 + industrial_pressure * 0.000025 + population_pressure * 0.00001
+	emissions_growth -= renewable_energy_share * 0.000018 + environment_budget_rate * 0.035
+	carbon_emissions = maxf(0.1, carbon_emissions * (1.0 + clampf(emissions_growth, -0.012, 0.012)))
+	air_pollution = clampf(air_pollution + industrial_capacity * 0.22 - renewable_energy_share * 0.012 - environment_budget_rate * 18.0 + 0.08, 0.0, 100.0)
+	water_pollution = clampf(water_pollution + industrial_capacity * 0.16 - environment_budget_rate * 13.0 + 0.04, 0.0, 100.0)
+	forest_cover = clampf(forest_cover - maxf(0.0, industrial_capacity - 0.08) * 0.045 + environment_budget_rate * 12.0, 2.0, 95.0)
+	biodiversity = clampf(biodiversity + (forest_cover - 35.0) * 0.006 - air_pollution * 0.0015 - water_pollution * 0.001 + environment_budget_rate * 4.0, 0.0, 100.0)
+	renewable_energy_share = clampf(renewable_energy_share + environment_budget_rate * 0.18 - 0.025, 0.0, 100.0)
+	climate_risk = clampf(climate_risk + maxf(0.0, carbon_emissions / maxf(float(population) / 1000000.0, 1.0) - 0.5) * 0.0004 - forest_cover * 0.0008 - environment_budget_rate * 3.0, 0.0, 100.0)
+	environmental_quality = clampf(100.0 - air_pollution * 0.43 - water_pollution * 0.31 + forest_cover * 0.18 + biodiversity * 0.12, 0.0, 100.0)
+	disaster_resilience = clampf(disaster_resilience + environment_budget_rate * 0.35 - 0.04, 10.0, 100.0)
+	if disaster_cooldown > 0:
+		disaster_cooldown -= 1
+	else:
+		var year := int(game_date.get("year", 2026))
+		var month := int(game_date.get("month", 1))
+		var country_id := str(selected_country.get("id", "AAA"))
+		var roll := posmod((country_id + "_" + str(year) + "_" + str(month)).hash(), 10000)
+		var hazard_probability := clampf(0.002 + climate_risk * 0.00017, 0.002, 0.019)
+		if float(roll) / 10000.0 < hazard_probability:
+			_trigger_natural_disaster(roll, year, month)
+	_update_budget_forecast()
+
+func _trigger_natural_disaster(seed_value: int, year: int, month: int) -> void:
+	var kinds := ["Flood", "Drought", "Severe storm", "Earthquake", "Wildfire", "Tsunami"]
+	var weights := [22, 18, 22, 18, 15, 5]
+	var roll := posmod(seed_value / 7, 100)
+	var running := 0
+	var disaster := "Flood"
+	for index in range(kinds.size()):
+		running += int(weights[index])
+		if roll < running:
+			disaster = str(kinds[index])
+			break
+	var severity := clampf(25.0 + float(posmod(seed_value / 13, 7000)) / 100.0, 25.0, 95.0)
+	var resilience_factor := 1.0 - disaster_resilience / 150.0
+	var economic_damage := gdp * severity * 0.00012 * resilience_factor
+	var infrastructure_damage := severity * 0.025 * resilience_factor
+	treasury = maxf(0.0, treasury - minf(treasury, economic_damage))
+	gdp = maxf(gdp * 0.90, gdp - economic_damage * 0.22)
+	population = maxi(1, population - int(float(population) * severity * 0.000008 * resilience_factor))
+	stability = maxf(0.0, stability - severity * 0.035 * resilience_factor)
+	for key in ["roads", "power", "housing"]:
+		infrastructure[key] = maxi(1, int(infrastructure.get(key, 1)) - int(infrastructure_damage / 8.0))
+	for index in range(cities.size()):
+		var city: Dictionary = cities[index]
+		city["quality_of_life"] = maxf(5.0, float(city.get("quality_of_life", 50.0)) - severity * 0.06 * resilience_factor)
+		city["development_index"] = maxf(5.0, float(city.get("development_index", 25.0)) - severity * 0.025 * resilience_factor)
+		cities[index] = city
+	var report := "%s disaster • severity %.0f/100 • estimated economic damage %s." % [disaster, severity, _environment_money(economic_damage)]
+	last_disaster_report = report
+	disaster_history.push_front({"year": year, "month": month, "type": disaster, "severity": severity, "damage": economic_damage})
+	while disaster_history.size() > 12:
+		disaster_history.pop_back()
+	disaster_cooldown = 5
+	environmental_quality = maxf(0.0, environmental_quality - severity * 0.025)
+	state_changed.emit()
+
+func _environment_money(value: float) -> String:
+	if value >= 1000000000000.0:
+		return "$%.2fT" % (value / 1000000000000.0)
+	if value >= 1000000000.0:
+		return "$%.2fB" % (value / 1000000000.0)
+	if value >= 1000000.0:
+		return "$%.1fM" % (value / 1000000.0)
+	return "$%.0f" % value
+
 func _initialize_research() -> void:
 	research_budget_rate = 0.015
 	research_labs = 1
@@ -1585,7 +1732,8 @@ func _apply_technology_effect(technology_id: String) -> void:
 func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate) / 12.0
+	monthly_environment_cost = maxf(0.0, gdp) * environment_budget_rate / 12.0
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate) / 12.0
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -1651,6 +1799,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	_initialize_diplomacy()
 	_initialize_government()
 	_initialize_research()
+	_initialize_environment()
 	state_changed.emit()
 
 func save_game() -> bool:
@@ -1695,7 +1844,14 @@ func save_game() -> bool:
 		"research_budget_rate": research_budget_rate, "research_labs": research_labs,
 		"scientists": scientists, "research_points": research_points,
 		"active_research_id": active_research_id, "technology_tree": technology_tree,
-		"completed_technologies": completed_technologies, "research_report": research_report,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
+		"completed_technologies": completed_technologies, "research_report": research_report,
+		"environment_budget_rate": environment_budget_rate, "monthly_environment_cost": monthly_environment_cost,
+		"carbon_emissions": carbon_emissions, "air_pollution": air_pollution, "water_pollution": water_pollution,
+		"forest_cover": forest_cover, "climate_risk": climate_risk, "biodiversity": biodiversity,
+		"environmental_quality": environmental_quality, "renewable_energy_share": renewable_energy_share,
+		"disaster_resilience": disaster_resilience, "disaster_cooldown": disaster_cooldown,
+		"disaster_history": disaster_history, "last_disaster_report": last_disaster_report,
+		"regional_funds": regional_funds, "selected_region_name": selected_region_name
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -1832,6 +1988,23 @@ func load_game() -> bool:
 	for technology_id in data.get("completed_technologies", []):
 		completed_technologies.append(str(technology_id))
 	research_report = str(data.get("research_report", "No technology projects completed yet."))
+	environment_budget_rate = float(data.get("environment_budget_rate", 0.012))
+	monthly_environment_cost = float(data.get("monthly_environment_cost", 0.0))
+	carbon_emissions = float(data.get("carbon_emissions", maxf(1.0, float(population) / 1000000.0 * 0.42)))
+	air_pollution = float(data.get("air_pollution", 35.0))
+	water_pollution = float(data.get("water_pollution", 28.0))
+	forest_cover = float(data.get("forest_cover", 32.0))
+	climate_risk = float(data.get("climate_risk", 24.0))
+	biodiversity = float(data.get("biodiversity", 65.0))
+	environmental_quality = float(data.get("environmental_quality", 62.0))
+	renewable_energy_share = float(data.get("renewable_energy_share", 18.0))
+	disaster_resilience = float(data.get("disaster_resilience", 42.0))
+	disaster_cooldown = int(data.get("disaster_cooldown", 0))
+	disaster_history.clear()
+	for disaster_data in data.get("disaster_history", []):
+		if typeof(disaster_data) == TYPE_DICTIONARY:
+			disaster_history.append(disaster_data)
+	last_disaster_report = str(data.get("last_disaster_report", "No major natural disasters recorded."))
 	if technology_tree.is_empty():
 		_initialize_research()
 	if political_parties.is_empty() or cabinet.is_empty():

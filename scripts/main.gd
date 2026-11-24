@@ -43,7 +43,8 @@ func _on_viewport_resized() -> void:
 			"companies": _show_companies()
 			"banking": _show_banking(),
 			"government": _show_government(),
-			"research": _show_research()
+			"research": _show_research(),
+			"environment": _show_environment()
 
 func _clear() -> void:
 	for child in get_children():
@@ -309,6 +310,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Population & social policy", PANEL_ALT, _show_society))
 	side.add_child(_button("International trade", PANEL_ALT, _show_trade))
 	side.add_child(_button("Research & technology", PANEL_ALT, _show_research))
+	side.add_child(_button("Environment & disasters", PANEL_ALT, _show_environment))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
@@ -913,6 +915,66 @@ func _show_research() -> void:
 	sections.add_child(_section_label("LATEST SCIENCE REPORT"))
 	sections.add_child(_muted_label(GameState.research_report))
 	sections.add_child(_muted_label("Research is an abstract national model. Technologies apply strategic modifiers; no real-world scientific discovery or individual researcher simulation is represented."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+func _show_environment() -> void:
+	current_screen = "environment"
+	var body := _base("Environment & natural disasters", "CLIMATE  /  POLLUTION  /  CONSERVATION  /  DISASTER RESILIENCE")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("CO₂ EMISSIONS", "%.1f Mt / index" % GameState.carbon_emissions, "ABSTRACT NATIONAL ESTIMATE"))
+	summary.add_child(_stat_card("ENVIRONMENT QUALITY", "%.1f / 100" % GameState.environmental_quality, "HIGHER IS BETTER"))
+	summary.add_child(_stat_card("FOREST COVER", "%.1f%%" % GameState.forest_cover, "ESTIMATED LAND COVER"))
+	summary.add_child(_stat_card("CLIMATE / HAZARD RISK", "%.1f / 100" % GameState.climate_risk, "SIMPLIFIED RISK INDEX"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 11)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("NATIONAL ENVIRONMENTAL INDICATORS"))
+	sections.add_child(_muted_label("Air pollution %.1f / 100  •  Water pollution %.1f / 100  •  Biodiversity %.1f / 100  •  Renewable energy %.1f%%  •  Disaster resilience %.1f / 100" % [GameState.air_pollution, GameState.water_pollution, GameState.biodiversity, GameState.renewable_energy_share, GameState.disaster_resilience]))
+	sections.add_child(_section_label("ENVIRONMENTAL POLICY & FUNDING"))
+	var funding := HSlider.new()
+	funding.min_value = 0.2
+	funding.max_value = 6.0
+	funding.step = 0.2
+	funding.value = GameState.environment_budget_rate * 100.0
+	sections.add_child(funding)
+	var funding_label := _muted_label("Environment budget: %.1f%% GDP  •  %s/month" % [funding.value, _money(GameState.monthly_environment_cost)])
+	sections.add_child(funding_label)
+	funding.value_changed.connect(func(value: float):
+		funding_label.text = "Environment budget: %.1f%% GDP  •  %s/month" % [value, _money(GameState.gdp * value / 1200.0)]
+	)
+	sections.add_child(_button("APPLY ENVIRONMENT BUDGET", BLUE, func():
+		GameState.set_environment_budget(funding.value / 100.0)
+		_show_environment()
+	))
+	sections.add_child(_section_label("NATIONAL ENVIRONMENT PROJECTS"))
+	var projects := [["reforestation", "REFORESTATION"], ["pollution_cleanup", "POLLUTION CLEANUP"], ["renewable_transition", "RENEWABLE TRANSITION"], ["flood_defense", "FLOOD DEFENSE"], ["disaster_preparedness", "DISASTER PREPAREDNESS"]]
+	for project in projects:
+		var project_id := str(project[0])
+		var project_name := str(project[1])
+		var cost := GameState.environment_project_cost(project_id)
+		sections.add_child(_button("%s  •  %s" % [project_name, _money(cost)], GREEN, func(id: String = project_id):
+			if GameState.invest_in_environment_project(id):
+				_show_environment()
+			else:
+				_show_toast("Project failed: insufficient treasury.")
+		))
+	sections.add_child(_section_label("NATURAL DISASTER MONITOR"))
+	sections.add_child(_muted_label("Resilience %.1f / 100  •  Next-event cooldown %d months" % [GameState.disaster_resilience, GameState.disaster_cooldown]))
+	sections.add_child(_muted_label("LATEST REPORT  /  " + GameState.last_disaster_report))
+	if GameState.disaster_history.is_empty():
+		sections.add_child(_muted_label("No major events in the recorded history."))
+	else:
+		for event in GameState.disaster_history:
+			sections.add_child(_muted_label("%02d/%d  •  %s  •  Severity %.0f/100  •  Estimated damage %s" % [int(event.get("month", 1)), int(event.get("year", 2026)), str(event.get("type", "Event")), float(event.get("severity", 0.0)), _money(float(event.get("damage", 0.0)))]))
+	sections.add_child(_muted_label("Disaster occurrence and damage are abstract game estimates. Hazard weights are not based on precise local geology, elevation, coastlines or live climate data. Environmental indicators are not official scientific measurements."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_government() -> void:
