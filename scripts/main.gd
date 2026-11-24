@@ -33,7 +33,7 @@ func _ready() -> void:
 	add_child(boot)
 	var boot_label := Label.new()
 	boot_label.name = "StartupStatus"
-	boot_label.text = "WORLD NATION SIMULATOR\\nInitializing world systems..."
+	boot_label.text = "WORLD NATION SIMULATOR\\nMenyiapkan sistem dunia..."
 	boot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	boot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	boot_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -250,7 +250,7 @@ func _show_country_select() -> void:
 	detail.add_theme_constant_override("separation", 12)
 	right.add_child(detail)
 	var hint := Label.new()
-	hint.text = "COUNTRY PROFILE"
+	hint.text = _id_text("COUNTRY PROFILE")
 	hint.add_theme_color_override("font_color", GOLD)
 	detail.add_child(hint)
 	var chosen := selected_country if not selected_country.is_empty() else (GameState.country_catalog[0] if not GameState.country_catalog.is_empty() else {})
@@ -359,12 +359,12 @@ func _show_dashboard() -> void:
 		emergency_column.add_theme_constant_override("separation", 7)
 		emergency_panel.add_child(emergency_column)
 		var emergency_title := Label.new()
-		emergency_title.text = "⚠  NATIONAL EMERGENCY  /  %s" % str(GameState.active_emergency.get("type", "Disaster")).to_upper()
+		emergency_title.text = _id_text("⚠  NATIONAL EMERGENCY  /  %s" % str(GameState.active_emergency.get("type", "Disaster")).to_upper())
 		emergency_title.add_theme_color_override("font_color", Color("#ff8b91"))
 		emergency_title.add_theme_font_size_override("font_size", 14)
 		emergency_column.add_child(emergency_title)
 		var emergency_detail := Label.new()
-		emergency_detail.text = "Severity %.0f/100  •  Estimated damage %s. Choose how your government responds." % [float(GameState.active_emergency.get("severity", 0.0)), _money(float(GameState.active_emergency.get("damage", 0.0)))]
+		emergency_detail.text = _id_text("Tingkat keparahan %.0f/100  •  Perkiraan kerusakan %s. Pilih tindakan pemerintah.") % [float(GameState.active_emergency.get("severity", 0.0)), _money(float(GameState.active_emergency.get("damage", 0.0)))]
 		emergency_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		emergency_detail.add_theme_color_override("font_color", TEXT)
 		emergency_column.add_child(emergency_detail)
@@ -385,7 +385,7 @@ func _show_dashboard() -> void:
 	var map_column := VBoxContainer.new()
 	map_panel.add_child(map_column)
 	var map_title := Label.new()
-	map_title.text = "WORLD INTELLIGENCE"
+	map_title.text = _id_text("WORLD INTELLIGENCE")
 	map_title.add_theme_color_override("font_color", CYAN)
 	map_title.add_theme_font_size_override("font_size", 11)
 	map_column.add_child(map_title)
@@ -444,7 +444,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
+	note.text = _id_text("Simulasi ekonomi bulanan • 177 wilayah pada peta • estimasi data dasar historis (2019).")
 	note.add_theme_color_override("font_color", MUTED)
 	note.add_theme_font_size_override("font_size", 10)
 	body.add_child(note)
@@ -2117,7 +2117,7 @@ func _show_infrastructure() -> void:
 	current_screen = "infrastructure"
 	_clear()
 	var heading := Label.new()
-	heading.text = "NATIONAL INFRASTRUCTURE"
+	heading.text = _id_text("NATIONAL INFRASTRUCTURE")
 	heading.add_theme_font_size_override("font_size", 24)
 	heading.add_theme_color_override("font_color", TEXT)
 	add_child(heading)
@@ -2542,7 +2542,40 @@ func _id_text(value: String) -> String:
 		"INSTITUTIONAL CAPACITY": "KAPASITAS LEMBAGA",
 		"NATIONAL FACILITIES": "FASILITAS NASIONAL",
 		"RESEARCH WORKFORCE": "TENAGA RISET",
-		"UNLOCKED": "TERBUKA"
+		"UNLOCKED": "TERBUKA",
+		"WORLD INTELLIGENCE": "INTELIJEN DUNIA",
+		"NATIONAL INFRASTRUCTURE": "INFRASTRUKTUR NASIONAL",
+		"NATIONAL EMERGENCY": "DARURAT NASIONAL",
+		"Severity": "Tingkat keparahan",
+		"Estimated damage": "Perkiraan kerusakan",
+		"Choose how your government responds.": "Pilih tindakan pemerintah.",
+		"Monthly economic simulation": "Simulasi ekonomi bulanan",
+		"mapped features": "wilayah pada peta",
+		"historical baseline estimates": "estimasi data dasar historis",
+		"Import tariff:": "Tarif impor:",
+		"Defense allocation:": "Alokasi pertahanan:",
+		"Average tax rate:": "Tarif pajak rata-rata:",
+		"Public spending:": "Belanja publik:",
+		"Healthcare budget:": "Anggaran kesehatan:",
+		"Education budget:": "Anggaran pendidikan:",
+		"Visa openness:": "Keterbukaan visa:",
+		"Visitor safety:": "Keamanan wisatawan:",
+		"Heritage protection:": "Perlindungan warisan budaya:",
+		"Tourism programme budget:": "Anggaran program pariwisata:",
+		"Press freedom:": "Kebebasan pers:",
+		"Media regulation:": "Regulasi media:",
+		"Public media literacy:": "Literasi media publik:",
+		"Public media budget:": "Anggaran media publik:",
+		"Intelligence budget:": "Anggaran intelijen:",
+		"Space program budget:": "Anggaran program antariksa:",
+		"Research budget:": "Anggaran riset:",
+		"Environment budget:": "Anggaran lingkungan:",
+		"Extraction tax:": "Pajak ekstraksi:",
+		"Welfare allocation:": "Alokasi kesejahteraan:",
+		"Policy interest rate:": "Suku bunga kebijakan:",
+		"Required reserves:": "Cadangan wajib:",
+		"Corporate tax rate:": "Tarif pajak perusahaan:",
+		"Investment cost:": "Biaya investasi:"
 	}
 	for english in screen_translations:
 		result = result.replace(english, screen_translations[english])
