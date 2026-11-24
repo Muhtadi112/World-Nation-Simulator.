@@ -22,6 +22,14 @@ var _min_lat := -90.0
 var _max_lat := 90.0
 var _map_scale := 1.0
 var _map_origin := Vector2.ZERO
+var _zoom := 1.0
+var _dragging := false
+var _did_drag := false
+var _press_position := Vector2.ZERO
+var _last_pointer := Vector2.ZERO
+var _pan_offset := Vector2.ZERO
+const MAP_CONTROL_SIZE := Vector2(36.0, 30.0)
+const MAP_CONTROL_GAP := 5.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -82,8 +90,9 @@ func _calculate_projection() -> void:
 	var lon_span := maxf(_max_lon - _min_lon, 1.0)
 	var lat_span := maxf(_max_lat - _min_lat, 1.0)
 	var padding := 22.0
-	_map_scale = minf(maxf(size.x - padding * 2.0, 1.0) / lon_span, maxf(size.y - 68.0, 1.0) / lat_span)
+	_map_scale = minf(maxf(size.x - padding * 2.0, 1.0) / lon_span, maxf(size.y - 68.0, 1.0) / lat_span) * _zoom
 	_map_origin = Vector2(size.x * 0.5 - ((_min_lon + _max_lon) * 0.5) * _map_scale, 30.0 + (size.y - 68.0) * 0.5 + ((_min_lat + _max_lat) * 0.5) * _map_scale)
+	_map_origin += _pan_offset
 	_plot_rect = Rect2(Vector2(8, 26), Vector2(maxf(size.x - 16, 1), maxf(size.y - 42, 1)))
 
 func _project(lon: float, lat: float) -> Vector2:
@@ -128,15 +137,81 @@ func _draw() -> void:
 		draw_arc(point, radius + 1.5, 0.0, TAU, 24, Color("#e8f3f8"), 1.0)
 		var label_color := SELECTED if is_selected else Color("#d6e5ee")
 		draw_string(font, point + Vector2(9, -7), str(city.get("name", "City")), HORIZONTAL_ALIGNMENT_LEFT, 150, 10 if not is_selected else 11, label_color)
-	draw_string(font, Vector2(14, size.y - 7), "%d CATALOGUED CITIES  •  TAP A MARKER TO OPEN CITY PROFILE" % _cities.size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 9, MUTED)
+	draw_string(font, Vector2(14, size.y - 7), "%d KOTA  •  GESER UNTUK MENJELAJAH  •  %.1fx" % [_cities.size(), _zoom], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, MUTED)
+	_draw_map_controls()
 
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		_select_nearest(event.position)
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_dragging = true
+			_did_drag = false
+			_press_position = event.position
+			_last_pointer = event.position
+		else:
+			if _dragging and not _did_drag:
+				if not _handle_map_control(event.position):
+					_select_nearest(event.position)
+			_dragging = false
 		accept_event()
-	elif event is InputEventScreenTouch and event.pressed:
-		_select_nearest(event.position)
+	elif event is InputEventMouseMotion and _dragging:
+		_apply_drag(event.position)
 		accept_event()
+	elif event is InputEventScreenTouch:
+		if event.pressed:
+			_dragging = true
+			_did_drag = false
+			_press_position = event.position
+			_last_pointer = event.position
+		else:
+			if _dragging and not _did_drag:
+				if not _handle_map_control(event.position):
+					_select_nearest(event.position)
+			_dragging = false
+		accept_event()
+	elif event is InputEventScreenDrag and _dragging:
+		_apply_drag(event.position)
+		accept_event()
+
+func _apply_drag(position: Vector2) -> void:
+	if not _dragging:
+		return
+	if position.distance_to(_press_position) > 7.0:
+		_did_drag = true
+	if _did_drag:
+		_pan_offset += position - _last_pointer
+		_last_pointer = position
+		queue_redraw()
+
+func _draw_map_controls() -> void:
+	var labels := ["+", "−", "↺"]
+	for i in range(labels.size()):
+		var rect := _map_control_rect(i)
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color("#102b3b")
+		style.border_color = ACCENT
+		style.set_border_width_all(1)
+		style.set_corner_radius_all(6)
+		draw_style_box(style, rect)
+		draw_string(ThemeDB.fallback_font, rect.position + Vector2(0, 21), labels[i], HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 17, Color("#eaf7fb"))
+
+func _map_control_rect(index: int) -> Rect2:
+	var total_width := MAP_CONTROL_SIZE.x * 3.0 + MAP_CONTROL_GAP * 2.0
+	var origin := Vector2(size.x - total_width - 10.0, 34.0)
+	return Rect2(origin + Vector2(index * (MAP_CONTROL_SIZE.x + MAP_CONTROL_GAP), 0), MAP_CONTROL_SIZE)
+
+func _handle_map_control(position: Vector2) -> bool:
+	for i in range(3):
+		if _map_control_rect(i).has_point(position):
+			if i == 0:
+				_zoom = minf(_zoom * 1.35, 5.0)
+			elif i == 1:
+				_zoom = maxf(_zoom / 1.35, 1.0)
+			else:
+				_zoom = 1.0
+				_pan_offset = Vector2.ZERO
+			queue_redraw()
+			return true
+	return false
 
 func _select_nearest(position: Vector2) -> void:
 	if _cities.is_empty() or not _plot_rect.has_point(position):
