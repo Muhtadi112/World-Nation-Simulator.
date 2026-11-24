@@ -173,7 +173,7 @@ func _gui_input(event: InputEvent) -> void:
 			_press_position = event.position
 			_last_pointer = event.position
 		else:
-			if _dragging and not _did_drag:
+			if _dragging and not _did_drag and not _handle_map_control(event.position):
 				_select_at(event.position)
 			_dragging = false
 		accept_event()
