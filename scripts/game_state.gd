@@ -2810,13 +2810,12 @@ func _run_monthly_tourism() -> void:
 	for site in heritage_sites:
 		site["condition"] = clampf(float(site.get("condition", 60.0)) - 0.12 + heritage_preservation * 0.0015, 0.0, 100.0)
 	var tourism_tax := monthly_tourism_revenue * 0.08
-	treasury += tourism_tax
 	annual_gdp_growth = clampf(annual_gdp_growth + (monthly_tourism_revenue / maxf(gdp / 12.0, 1.0)) * 0.025, -15.0, 20.0)
 	last_tourism_report = "Visitors %s this month • Annual %s • Tourism output %s/year • Jobs %s • Tax %s." % [_format_trade_units(monthly_tourist_arrivals), _format_trade_units(annual_tourist_arrivals), _format_trade_money(tourism_revenue), _format_trade_units(tourism_employment), _format_trade_money(tourism_tax)]
 	_update_budget_forecast()
 
 func _update_budget_forecast() -> void:
-	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0 + maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate
+	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0 + maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate + monthly_tourism_revenue * 0.08
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
 	monthly_environment_cost = maxf(0.0, gdp) * environment_budget_rate / 12.0
 	monthly_tourism_cost = maxf(0.0, gdp) * tourism_budget_rate / 12.0
