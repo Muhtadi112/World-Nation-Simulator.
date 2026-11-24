@@ -2840,6 +2840,38 @@ func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
 	_update_budget_forecast()
 	state_changed.emit()
 
+func get_national_objectives() -> Array[Dictionary]:
+	var objectives: Array[Dictionary] = []
+	var growth_progress := clampf(annual_gdp_growth / 5.0 * 100.0, 0.0, 100.0)
+	objectives.append({
+		"id": "growth", "title": "Sustain economic growth",
+		"description": "Raise annual GDP growth to 5.0%.",
+		"progress": growth_progress, "value": "%.1f%% / 5.0%%" % annual_gdp_growth,
+		"complete": annual_gdp_growth >= 5.0
+	})
+	var approval_progress := clampf(government_approval / 65.0 * 100.0, 0.0, 100.0)
+	objectives.append({
+		"id": "approval", "title": "Build public confidence",
+		"description": "Reach at least 65% government approval.",
+		"progress": approval_progress, "value": "%.1f%% / 65.0%%" % government_approval,
+		"complete": government_approval >= 65.0
+	})
+	var poverty_progress := clampf((25.0 - poverty_rate) / 10.0 * 100.0, 0.0, 100.0)
+	objectives.append({
+		"id": "poverty", "title": "Reduce national poverty",
+		"description": "Bring the poverty rate down to 15%.",
+		"progress": poverty_progress, "value": "%.1f%% / 15.0%%" % poverty_rate,
+		"complete": poverty_rate <= 15.0
+	})
+	var stability_progress := clampf(stability / 80.0 * 100.0, 0.0, 100.0)
+	objectives.append({
+		"id": "stability", "title": "Maintain national stability",
+		"description": "Keep national stability at 80 or higher.",
+		"progress": stability_progress, "value": "%.1f / 80" % stability,
+		"complete": stability >= 80.0
+	})
+	return objectives
+
 func start_new_game(mode: String, country: Dictionary) -> void:
 	game_mode = mode
 	selected_country = country.duplicate(true)

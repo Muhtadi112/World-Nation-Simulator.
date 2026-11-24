@@ -308,6 +308,14 @@ func _show_dashboard() -> void:
 	stats.add_child(_stat_card("UNEMPLOYMENT", "%.1f%%" % GameState.unemployment, "LABOR MARKET"))
 	stats.add_child(_stat_card("PUBLIC DEBT", _money(GameState.debt), "GOVERNMENT LIABILITIES"))
 	stats.add_child(_stat_card("GDP GROWTH", "%.1f%%" % GameState.annual_gdp_growth, "ANNUAL ESTIMATE"))
+	var objective_header := _section_label("NATIONAL OBJECTIVES  /  YOUR FIRST PRIORITIES")
+	body.add_child(objective_header)
+	var objective_grid := GridContainer.new()
+	objective_grid.columns = 1
+	objective_grid.add_theme_constant_override("v_separation", 8)
+	body.add_child(objective_grid)
+	for objective in GameState.get_national_objectives():
+		objective_grid.add_child(_objective_card(objective))
 	var main_row := VBoxContainer.new()
 	main_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_row.add_theme_constant_override("separation", 12)
@@ -2291,6 +2299,39 @@ func _save_game() -> void:
 
 func _action_button(label: String, message: String) -> Button:
 	return _button(label, PANEL_ALT, func(): _show_toast(message))
+
+func _objective_card(objective: Dictionary) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", _style(PANEL, GREEN if bool(objective.get("complete", false)) else BORDER, 1, 10))
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 5)
+	panel.add_child(column)
+	var title := Label.new()
+	title.text = ("✓  " if bool(objective.get("complete", false)) else "◈  ") + str(objective.get("title", "National objective"))
+	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_color_override("font_color", GREEN if bool(objective.get("complete", false)) else TEXT)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(title)
+	var description := Label.new()
+	description.text = str(objective.get("description", ""))
+	description.add_theme_font_size_override("font_size", 10)
+	description.add_theme_color_override("font_color", MUTED)
+	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(description)
+	var progress := ProgressBar.new()
+	progress.min_value = 0.0
+	progress.max_value = 100.0
+	progress.value = float(objective.get("progress", 0.0))
+	progress.show_percentage = false
+	progress.custom_minimum_size.y = 9
+	column.add_child(progress)
+	var value := Label.new()
+	value.text = str(objective.get("value", ""))
+	value.add_theme_font_size_override("font_size", 10)
+	value.add_theme_color_override("font_color", GREEN if bool(objective.get("complete", false)) else CYAN)
+	column.add_child(value)
+	return panel
 
 func _stat_card(label: String, value: String, foot: String) -> PanelContainer:
 	var panel := PanelContainer.new()
