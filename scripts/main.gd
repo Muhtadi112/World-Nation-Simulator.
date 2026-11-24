@@ -190,7 +190,7 @@ func _show_country_select() -> void:
 	name.add_theme_color_override("font_color", TEXT)
 	detail.add_child(name)
 	detail.add_child(_muted_label("Capital: %s" % chosen["capital"]))
-	detail.add_child(_muted_label("Population: %s" % _format_number(int(chosen["population"]))))
+	detail.add_child(_muted_label("Population: %s" % _format_format_number(int(chosen["population"]))))
 	detail.add_child(_muted_label("GDP: %s" % _money(float(chosen["gdp"]))))
 	detail.add_child(_muted_label("Currency: %s" % chosen.get("currency", "Not listed")))
 	detail.add_child(_muted_label("Source baseline: Natural Earth / approx. 2019"))
@@ -259,7 +259,7 @@ func _show_dashboard() -> void:
 	var stats := HBoxContainer.new()
 	stats.add_theme_constant_override("separation", 10)
 	body.add_child(stats)
-	stats.add_child(_stat_card("POPULATION", _format_number(GameState.population), "NATIONAL RESIDENTS"))
+	stats.add_child(_stat_card("POPULATION", _format_format_number(GameState.population), "NATIONAL RESIDENTS"))
 	stats.add_child(_stat_card("GDP", _money(GameState.gdp), "NATIONAL OUTPUT"))
 	stats.add_child(_stat_card("TREASURY", _money(GameState.treasury), "AVAILABLE FUNDS"))
 	stats.add_child(_stat_card("INFLATION", "%.1f%%" % GameState.inflation, "ANNUAL"))
@@ -345,7 +345,7 @@ func _show_world_nations() -> void:
 		economy.add_theme_color_override("font_color", MUTED)
 		line.add_child(economy)
 		var people := Label.new()
-		people.text = "Pop. %s   •   Stability %.0f" % [_format_number(int(nation.get("population", 0))), float(nation.get("stability", 0.0))]
+		people.text = "Pop. %s   •   Stability %.0f" % [_format_format_number(int(nation.get("population", 0))), float(nation.get("stability", 0.0))]
 		people.add_theme_color_override("font_color", GREEN)
 		line.add_child(people)
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
@@ -367,7 +367,7 @@ func _show_trade() -> void:
 	market.add_child(market_column)
 	market_column.add_child(_section_label("WORLD COMMODITY MARKET"))
 	for key in ["food", "energy", "metals", "goods"]:
-		market_column.add_child(_muted_label("%s  •  %s per unit  •  Stockpile: %s" % [str(key).capitalize(), _money(float(GameState.market_prices.get(key, 0.0))), _format_number(int(GameState.resource_stockpiles.get(key, 0.0)))]))
+		market_column.add_child(_muted_label("%s  •  %s per unit  •  Stockpile: %s" % [str(key).capitalize(), _money(float(GameState.market_prices.get(key, 0.0))), _format_format_number(int(GameState.resource_stockpiles.get(key, 0.0)))]))
 	var policy := PanelContainer.new()
 	policy.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
 	body.add_child(policy)
@@ -435,9 +435,9 @@ func _show_industry() -> void:
 	var stats := HBoxContainer.new()
 	stats.add_theme_constant_override("separation", 10)
 	body.add_child(stats)
-	stats.add_child(_stat_card("FACTORIES", _format_number(GameState.factory_count), "INDUSTRIAL FACILITIES"))
+	stats.add_child(_stat_card("FACTORIES", _format_format_number(GameState.factory_count), "INDUSTRIAL FACILITIES"))
 	stats.add_child(_stat_card("INDUSTRIAL OUTPUT", _money(GameState.industrial_output), "MONTHLY VALUE ADDED"))
-	stats.add_child(_stat_card("INDUSTRIAL JOBS", _format_number(GameState.industrial_jobs), "ESTIMATED WORKFORCE"))
+	stats.add_child(_stat_card("INDUSTRIAL JOBS", _format_format_number(GameState.industrial_jobs), "ESTIMATED WORKFORCE"))
 	var capacity_panel := PanelContainer.new()
 	capacity_panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
 	body.add_child(capacity_panel)
@@ -456,7 +456,7 @@ func _show_industry() -> void:
 	resources.add_child(resource_column)
 	resource_column.add_child(_section_label("NATIONAL RESOURCE STOCKPILES"))
 	for key in ["food", "energy", "metals", "goods"]:
-		resource_column.add_child(_muted_label("%s: %s units" % [str(key).capitalize(), _format_number(int(GameState.resource_stockpiles.get(key, 0.0)))]))
+		resource_column.add_child(_muted_label("%s: %s units" % [str(key).capitalize(), _format_format_number(int(GameState.resource_stockpiles.get(key, 0.0)))]))
 	resource_column.add_child(_muted_label("Stockpiles are abstract simulation units, not real-world tonnes."))
 	var investment_cost := maxf(GameState.gdp * 0.002, 100000000.0)
 	body.add_child(_button("BUILD FACTORY  •  %s" % _money(investment_cost), GREEN, func():
@@ -474,9 +474,9 @@ func _show_military() -> void:
 	var stats := HBoxContainer.new()
 	stats.add_theme_constant_override("separation", 10)
 	body.add_child(stats)
-	stats.add_child(_stat_card("ACTIVE PERSONNEL", _format_number(GameState.military_personnel), "SERVICE MEMBERS"))
+	stats.add_child(_stat_card("ACTIVE PERSONNEL", _format_format_number(GameState.military_personnel), "SERVICE MEMBERS"))
 	stats.add_child(_stat_card("MILITARY READINESS", "%.0f%%" % GameState.military_readiness, "OPERATIONAL READINESS"))
-	stats.add_child(_stat_card("MILITARY POWER", _format_number(int(GameState.military_strength())), "COMPOSITE INDEX"))
+	stats.add_child(_stat_card("MILITARY POWER", _format_format_number(int(GameState.military_strength())), "COMPOSITE INDEX"))
 	var equipment := PanelContainer.new()
 	equipment.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
 	body.add_child(equipment)
@@ -484,9 +484,9 @@ func _show_military() -> void:
 	equipment_column.add_theme_constant_override("separation", 10)
 	equipment.add_child(equipment_column)
 	equipment_column.add_child(_section_label("FORCE STRUCTURE"))
-	equipment_column.add_child(_muted_label("Main battle tanks: %s" % _format_number(GameState.tanks)))
-	equipment_column.add_child(_muted_label("Military aircraft: %s" % _format_number(GameState.aircraft)))
-	equipment_column.add_child(_muted_label("Naval vessels: %s" % _format_number(GameState.naval_vessels)))
+	equipment_column.add_child(_muted_label("Main battle tanks: %s" % _format_format_number(GameState.tanks)))
+	equipment_column.add_child(_muted_label("Military aircraft: %s" % _format_format_number(GameState.aircraft)))
+	equipment_column.add_child(_muted_label("Naval vessels: %s" % _format_format_number(GameState.naval_vessels)))
 	equipment_column.add_child(_muted_label("Monthly defense cost: %s" % _money(GameState.monthly_defense_cost)))
 	var policy := PanelContainer.new()
 	policy.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
@@ -607,7 +607,7 @@ func _show_diplomacy_detail() -> void:
 		return
 	var body := _base("%s  %s" % [nation.get("flag", "🏳"), nation.get("name", "Nation")], "BILATERAL RELATIONS  /  FOREIGN AFFAIRS")
 	body.add_child(_stat_card("RELATIONSHIP", "%+.0f / 100" % float(relation.get("relation", 0.0)), _diplomacy_status(relation)))
-	body.add_child(_muted_label("Capital: %s  •  GDP: %s  •  Population: %s" % [nation.get("capital", "Not listed"), _money(float(nation.get("gdp", 0.0))), _format_number(int(nation.get("population", 0)))]))
+	body.add_child(_muted_label("Capital: %s  •  GDP: %s  •  Population: %s" % [nation.get("capital", "Not listed"), _money(float(nation.get("gdp", 0.0))), _format_format_number(int(nation.get("population", 0)))]))
 	body.add_child(_muted_label("Trade agreement: %s  •  Alliance: %s" % ["ACTIVE" if relation.get("trade_agreement", false) else "NONE", "ACTIVE" if relation.get("alliance", false) else "NONE"]))
 	body.add_child(_muted_label("Sanctions: %s  •  War: %s" % ["ACTIVE" if relation.get("sanctions", false) else "NONE", "ACTIVE" if relation.get("at_war", false) else "NONE"]))
 	body.add_child(_section_label("DIPLOMATIC ACTIONS"))
@@ -830,10 +830,10 @@ func _show_society() -> void:
 	summary.add_theme_constant_override("h_separation", 8)
 	summary.add_theme_constant_override("v_separation", 8)
 	body.add_child(summary)
-	summary.add_child(_stat_card("POPULATION", _number(GameState.population), "TOTAL RESIDENTS"))
-	summary.add_child(_stat_card("LABOUR FORCE", _number(GameState.labor_force), "62% OF POPULATION ESTIMATE"))
-	summary.add_child(_stat_card("EMPLOYED", _number(GameState.employed_citizens), "WORKING CITIZENS"))
-	summary.add_child(_stat_card("UNEMPLOYED", _number(GameState.unemployed_citizens), "%.1f%% OF LABOUR FORCE" % GameState.unemployment))
+	summary.add_child(_stat_card("POPULATION", _format_number(GameState.population), "TOTAL RESIDENTS"))
+	summary.add_child(_stat_card("LABOUR FORCE", _format_number(GameState.labor_force), "62% OF POPULATION ESTIMATE"))
+	summary.add_child(_stat_card("EMPLOYED", _format_number(GameState.employed_citizens), "WORKING CITIZENS"))
+	summary.add_child(_stat_card("UNEMPLOYED", _format_number(GameState.unemployed_citizens), "%.1f%% OF LABOUR FORCE" % GameState.unemployment))
 	summary.add_child(_stat_card("AVG MONTHLY INCOME", _money(GameState.average_monthly_income), "MODELLED PER-CAPITA WAGE"))
 	summary.add_child(_stat_card("HOUSEHOLD CONSUMPTION", _money(GameState.household_consumption), "MONTHLY NATIONAL ESTIMATE"))
 	body.add_child(_section_label("INCOME DISTRIBUTION"))
@@ -961,7 +961,7 @@ func _show_companies() -> void:
 			total_revenue += float(company.get("revenue", 0.0))
 			total_profit += float(company.get("profit", 0.0))
 	summary.add_child(_stat_card("ACTIVE COMPANIES", str(active_count), "%d BANKRUPT" % bankrupt_count))
-	summary.add_child(_stat_card("PRIVATE JOBS", _format_number(GameState.private_sector_jobs), "ESTIMATED EMPLOYEES"))
+	summary.add_child(_stat_card("PRIVATE JOBS", _format_format_number(GameState.private_sector_jobs), "ESTIMATED EMPLOYEES"))
 	summary.add_child(_stat_card("MONTHLY REVENUE", _money(total_revenue), "COMPANY TURNOVER"))
 	summary.add_child(_stat_card("MONTHLY PROFIT", _money(total_profit), "BEFORE CORPORATE TAX"))
 	summary.add_child(_stat_card("CORPORATE TAX", _money(GameState.monthly_corporate_tax), "MONTHLY GOVERNMENT RECEIPTS"))
@@ -1031,7 +1031,7 @@ func _show_companies() -> void:
 		column.add_theme_constant_override("separation", 3)
 		row.add_child(column)
 		column.add_child(_muted_label("%s  •  %s  •  %s" % [str(company.get("name", "Company")), str(company.get("sector", "Sector")), city_name]))
-		column.add_child(_muted_label("%s employees  •  Wage %s  •  Revenue %s  •  Profit %s  •  %s" % [_format_number(int(company.get("employees", 0))), _money(float(company.get("average_wage", 0.0))), _money(float(company.get("revenue", 0.0))), _money(float(company.get("profit", 0.0))), str(company.get("status", "Operating"))]))
+		column.add_child(_muted_label("%s employees  •  Wage %s  •  Revenue %s  •  Profit %s  •  %s" % [_format_format_number(int(company.get("employees", 0))), _money(float(company.get("average_wage", 0.0))), _money(float(company.get("revenue", 0.0))), _money(float(company.get("profit", 0.0))), str(company.get("status", "Operating"))]))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 
@@ -1055,7 +1055,7 @@ func _show_cities() -> void:
 			region_row.add_theme_constant_override("separation", 10)
 			regional_box.add_child(region_row)
 			var region_label := Label.new()
-			region_label.text = "%s  •  %d cities  •  %s residents" % [region.get("name", "Region"), int(region.get("city_count", 0)), _format_number(int(region.get("population", 0)))]
+			region_label.text = "%s  •  %d cities  •  %s residents" % [region.get("name", "Region"), int(region.get("city_count", 0)), _format_format_number(int(region.get("population", 0)))]
 			region_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			region_label.add_theme_color_override("font_color", TEXT)
 			region_row.add_child(region_label)
@@ -1076,7 +1076,7 @@ func _show_cities() -> void:
 		management_box.add_theme_constant_override("separation", 7)
 		management_panel.add_child(management_box)
 		management_box.add_child(_section_label("REGIONAL GOVERNMENT  /  " + GameState.selected_region_name.to_upper()))
-		management_box.add_child(_muted_label("%d cities  •  %s residents  •  %s GDP  •  QoL %.1f  •  Employment %.1f%%" % [int(region_detail.get("city_count", 0)), _format_number(int(region_detail.get("population", 0))), _money(float(region_detail.get("gdp", 0.0))), float(region_detail.get("average_quality_of_life", 0.0)), float(region_detail.get("average_employment", 0.0))]))
+		management_box.add_child(_muted_label("%d cities  •  %s residents  •  %s GDP  •  QoL %.1f  •  Employment %.1f%%" % [int(region_detail.get("city_count", 0)), _format_format_number(int(region_detail.get("population", 0))), _money(float(region_detail.get("gdp", 0.0))), float(region_detail.get("average_quality_of_life", 0.0)), float(region_detail.get("average_employment", 0.0))]))
 		management_box.add_child(_muted_label("Regional development fund: " + _money(float(region_detail.get("funds", 0.0)))))
 		var allocation_row := HBoxContainer.new()
 		allocation_row.add_theme_constant_override("separation", 8)
@@ -1139,7 +1139,7 @@ func _show_cities() -> void:
 		var metrics := HBoxContainer.new()
 		metrics.add_theme_constant_override("separation", 8)
 		detail.add_child(metrics)
-		metrics.add_child(_stat_card("POPULATION", _format_number(int(selected.get("population", 0))), "CITY RESIDENTS"))
+		metrics.add_child(_stat_card("POPULATION", _format_format_number(int(selected.get("population", 0))), "CITY RESIDENTS"))
 		metrics.add_child(_stat_card("GDP", _money(float(selected.get("gdp", 0.0))), "CITY ECONOMIC BASE"))
 		metrics.add_child(_stat_card("QUALITY OF LIFE", "%.1f / 100" % float(selected.get("quality_of_life", 0.0)), "DEVELOPMENT INDEX"))
 		detail.add_child(_muted_label("Employment %.1f%%  •  Development %.1f / 100  •  Coordinates %.2f°, %.2f°" % [float(selected.get("employment", 0.0)), float(selected.get("development_index", 0.0)), float(selected.get("lat", 0.0)), float(selected.get("lon", 0.0))]))
@@ -1153,7 +1153,7 @@ func _show_cities() -> void:
 		social_metrics.add_child(_stat_card("HEALTH ACCESS", "%.1f" % float(selected.get("health_access", 49.0)), "SERVICE INDEX / 100"))
 		social_metrics.add_child(_stat_card("EDUCATION ACCESS", "%.1f" % float(selected.get("education_access", 46.0)), "SERVICE INDEX / 100"))
 		social_metrics.add_child(_stat_card("SATISFACTION", "%.1f / 100" % float(selected.get("resident_satisfaction", selected.get("quality_of_life", 58.0))), "RESIDENT SENTIMENT"))
-		detail.add_child(_muted_label("Housing affordability %.1f / 100  •  Births %s  •  Deaths %s  •  Net migration %s residents this month" % [float(selected.get("housing_affordability", 65.0)), _format_number(int(selected.get("births_monthly", 0))), _format_number(int(selected.get("deaths_monthly", 0))), _format_number(int(selected.get("monthly_migration", 0)))]))
+		detail.add_child(_muted_label("Housing affordability %.1f / 100  •  Births %s  •  Deaths %s  •  Net migration %s residents this month" % [float(selected.get("housing_affordability", 65.0)), _format_format_number(int(selected.get("births_monthly", 0))), _format_format_number(int(selected.get("deaths_monthly", 0))), _format_format_number(int(selected.get("monthly_migration", 0)))]))
 		detail.add_child(_muted_label("Migration is an abstract monthly estimate driven by satisfaction relative to other listed cities. Food security uses the national food stockpile as a shared proxy, not a city distribution simulation."))
 		var projects := HFlowContainer.new()
 		projects.add_theme_constant_override("h_separation", 7)
@@ -1202,7 +1202,7 @@ func _show_cities() -> void:
 			detail.add_child(_muted_label("No constructed buildings yet."))
 		else:
 			for building in buildings:
-				detail.add_child(_muted_label("• %s  —  %s jobs  /  %s monthly output" % [str(building.get("name", "Building")), _format_number(int(building.get("jobs", 0))), _money(float(building.get("monthly_output", 0.0)))]))
+				detail.add_child(_muted_label("• %s  —  %s jobs  /  %s monthly output" % [str(building.get("name", "Building")), _format_format_number(int(building.get("jobs", 0))), _money(float(building.get("monthly_output", 0.0)))]))
 	search.text_changed.connect(func(query: String):
 		for child in rows.get_children():
 			child.queue_free()
@@ -1214,7 +1214,7 @@ func _show_cities() -> void:
 			line.add_theme_constant_override("separation", 10)
 			rows.add_child(line)
 			var label := Label.new()
-			label.text = "%s  •  %s  •  %s residents" % [city.get("name", "City"), city.get("region", "Region"), _format_number(int(city.get("population", 0)))]
+			label.text = "%s  •  %s  •  %s residents" % [city.get("name", "City"), city.get("region", "Region"), _format_format_number(int(city.get("population", 0)))]
 			label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			label.add_theme_color_override("font_color", TEXT)
 			line.add_child(label)
@@ -1322,7 +1322,7 @@ func _style(color: Color, border_color: Color, border_width: int, radius: int) -
 	box.content_margin_bottom = 10
 	return box
 
-func _format_number(value: int) -> String:
+func _format_format_number(value: int) -> String:
 	if value >= 1000000000:
 		return "%.2fB" % (float(value) / 1000000000.0)
 	if value >= 1000000:
