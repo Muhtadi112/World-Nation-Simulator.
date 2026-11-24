@@ -779,6 +779,18 @@ var industrial_output: float = 0.0
 var industrial_jobs: int = 0
 var average_industrial_wage: float = 0.0
 var resource_stockpiles: Dictionary = {"food": 0.0, "energy": 0.0, "metals": 0.0, "goods": 0.0}
+var power_plants: Array[Dictionary] = []
+var energy_fuel_reserves: Dictionary = {"coal": 0.0, "gas": 0.0, "uranium": 0.0}
+var grid_capacity: float = 0.0
+var energy_demand: float = 0.0
+var energy_generation: float = 0.0
+var energy_supply_ratio: float = 1.0
+var energy_price: float = 1200.0
+var blackout_risk: float = 5.0
+var monthly_power_cost: float = 0.0
+var regional_power_access: Dictionary = {}
+var last_energy_report: String = "National grid operating normally."
+
 var market_prices: Dictionary = {"food": 500.0, "energy": 1200.0, "metals": 2500.0, "goods": 4000.0}
 var trade_exports: float = 0.0
 var trade_imports: float = 0.0
@@ -919,6 +931,7 @@ func _advance_day() -> void:
 			game_date["year"] += 1
 	if month_changed:
 		_run_monthly_economy()
+		_run_monthly_energy()
 		_run_monthly_industry()
 		_run_monthly_infrastructure()
 		_run_monthly_transport_simulation()
@@ -941,7 +954,7 @@ func _run_monthly_economy() -> void:
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
 	monthly_environment_cost = gdp * environment_budget_rate / 12.0
-	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost
+	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost + monthly_power_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 	treasury += monthly_balance
 	if treasury < 0.0:
@@ -1476,6 +1489,157 @@ func hold_election(early: bool = true) -> bool:
 	state_changed.emit()
 	return true
 
+func _initialize_energy() -> void:
+	power_plants.clear()
+	energy_fuel_reserves = {
+		"coal": maxf(10.0, gdp / 1000000000.0 * 0.42),
+		"gas": maxf(8.0, gdp / 1000000000.0 * 0.30),
+		"uranium": maxf(2.0, gdp / 1000000000.0 * 0.025)
+	}
+	energy_demand = maxf(1.0, float(population) / 8000000.0 + gdp / 100000000000.0 * 0.30)
+	var base_capacity := energy_demand * 1.22
+	var plant_mix := [
+		{"type": "coal", "share": 0.28, "availability": 0.82},
+		{"type": "gas", "share": 0.20, "availability": 0.88},
+		{"type": "nuclear", "share": 0.12, "availability": 0.91},
+		{"type": "hydro", "share": 0.16, "availability": 0.72},
+		{"type": "solar", "share": 0.14, "availability": 0.24},
+		{"type": "wind", "share": 0.10, "availability": 0.36}
+	]
+	var plant_index := 0
+	for spec in plant_mix:
+		var kind := str(spec["type"])
+		var capacity := base_capacity * float(spec["share"])
+		power_plants.append({
+			"id": "GRID_%s_%02d" % [kind.to_upper(), plant_index + 1],
+			"type": kind,
+			"name": "%s National Station" % kind.capitalize(),
+			"capacity": capacity,
+			"availability": float(spec["availability"]),
+			"operating": true,
+			"age": 4
+		})
+		plant_index += 1
+	grid_capacity = energy_demand * 1.30
+	energy_generation = 0.0
+	energy_supply_ratio = 1.0
+	energy_price = 1200.0
+	blackout_risk = 4.0
+	monthly_power_cost = gdp * 0.0035 / 12.0
+	regional_power_access.clear()
+	for region in get_regions():
+		var region_name := str(region.get("name", ""))
+		regional_power_access[region_name] = 78.0 + float(abs(region_name.hash()) % 1800) / 100.0
+	last_energy_report = "National grid commissioned with %d generation stations." % power_plants.size()
+	_run_monthly_energy()
+
+func energy_plant_cost(plant_type: String) -> float:
+	var costs := {
+		"coal": 0.0018, "gas": 0.0015, "nuclear": 0.0055,
+		"hydro": 0.0032, "solar": 0.0013, "wind": 0.0017
+	}
+	if not costs.has(plant_type):
+		return -1.0
+	return maxf(gdp * float(costs[plant_type]), 35000000.0)
+
+func build_power_plant(plant_type: String) -> bool:
+	var cost := energy_plant_cost(plant_type)
+	if cost < 0.0 or treasury < cost or power_plants.size() >= 80:
+		return false
+	var capacities := {"coal": 0.10, "gas": 0.11, "nuclear": 0.16, "hydro": 0.09, "solar": 0.07, "wind": 0.08}
+	var availability := {"coal": 0.82, "gas": 0.88, "nuclear": 0.91, "hydro": 0.72, "solar": 0.24, "wind": 0.36}
+	var capacity := maxf(0.5, energy_demand * float(capacities[plant_type]))
+	treasury -= cost
+	power_plants.append({
+		"id": "GRID_%s_%03d" % [plant_type.to_upper(), power_plants.size() + 1],
+		"type": plant_type,
+		"name": "%s Power Station %d" % [plant_type.capitalize(), power_plants.size() + 1],
+		"capacity": capacity,
+		"availability": float(availability[plant_type]),
+		"operating": true,
+		"age": 0
+	})
+	last_energy_report = "%s generation station commissioned (+%.2f GW capacity)." % [plant_type.capitalize(), capacity]
+	state_changed.emit()
+	return true
+
+func upgrade_national_grid() -> bool:
+	var cost := maxf(gdp * (0.0007 + grid_capacity / maxf(energy_demand, 1.0) * 0.00012), 25000000.0)
+	if treasury < cost or grid_capacity >= energy_demand * 3.0:
+		return false
+	treasury -= cost
+	grid_capacity = minf(energy_demand * 3.0, grid_capacity + maxf(1.0, energy_demand * 0.12))
+	last_energy_report = "National transmission capacity expanded."
+	state_changed.emit()
+	return true
+
+func upgrade_regional_grid(region_name: String) -> bool:
+	if not regional_power_access.has(region_name):
+		return false
+	var access := float(regional_power_access[region_name])
+	if access >= 100.0:
+		return false
+	var cost := maxf(gdp * 0.00025, 15000000.0)
+	if treasury < cost:
+		return false
+	treasury -= cost
+	regional_power_access[region_name] = minf(100.0, access + 8.0)
+	last_energy_report = "%s regional grid upgraded to %.1f%% access." % [region_name, float(regional_power_access[region_name])]
+	state_changed.emit()
+	return true
+
+func _run_monthly_energy() -> void:
+	if energy_demand <= 0.0:
+		energy_demand = maxf(1.0, float(population) / 8000000.0 + gdp / 100000000000.0 * 0.30)
+	var total_generation := 0.0
+	var fuel_cost := 0.0
+	for index in range(power_plants.size()):
+		var plant: Dictionary = power_plants[index]
+		if not bool(plant.get("operating", true)):
+			continue
+		var kind := str(plant.get("type", "gas"))
+		var capacity := float(plant.get("capacity", 0.0))
+		var availability := float(plant.get("availability", 0.5))
+		var fuel_key := kind
+		if kind == "coal" or kind == "gas" or kind == "nuclear":
+			var fuel_need := capacity * availability * 0.035
+			var fuel_available := float(energy_fuel_reserves.get(fuel_key, 0.0))
+			var fuel_ratio := clampf(fuel_available / maxf(fuel_need, 0.001), 0.0, 1.0)
+			energy_fuel_reserves[fuel_key] = maxf(0.0, fuel_available - fuel_need * fuel_ratio)
+			availability *= fuel_ratio
+			fuel_cost += capacity * availability * (0.00012 if kind == "nuclear" else 0.00008)
+		var generated := capacity * availability
+		total_generation += generated
+		plant["age"] = int(plant.get("age", 0)) + 1
+		power_plants[index] = plant
+	energy_generation = total_generation
+	energy_supply_ratio = clampf(minf(energy_generation, grid_capacity) / maxf(energy_demand, 0.1), 0.0, 1.5)
+	var supply_gap := maxf(0.0, 1.0 - energy_supply_ratio)
+	blackout_risk = clampf(supply_gap * 100.0 + maxf(0.0, energy_demand / maxf(grid_capacity, 0.1) - 0.85) * 12.0, 0.0, 100.0)
+	energy_price = clampf(850.0 + supply_gap * 4200.0 + maxf(0.0, energy_demand - energy_generation) * 18.0, 400.0, 12000.0)
+	var renewable_generation := 0.0
+	for plant in power_plants:
+		if ["hydro", "solar", "wind"].has(str(plant.get("type", ""))):
+			renewable_generation += float(plant.get("capacity", 0.0)) * float(plant.get("availability", 0.0))
+	var renewable_ratio := renewable_generation / maxf(total_generation, 0.1)
+	renewable_energy_share = clampf(renewable_ratio * 100.0, 0.0, 100.0)
+	monthly_power_cost = gdp * (0.0022 + fuel_cost + supply_gap * 0.006) / 12.0
+	market_prices["energy"] = energy_price
+	resource_stockpiles["energy"] = maxf(0.0, float(resource_stockpiles.get("energy", 0.0)) + energy_generation - energy_demand)
+	if supply_gap > 0.15:
+		last_energy_report = "Power shortage %.1f%% • rolling blackouts likely." % (supply_gap * 100.0)
+		annual_gdp_growth = maxf(-5.0, annual_gdp_growth - supply_gap * 0.18)
+		stability = maxf(0.0, stability - supply_gap * 1.2)
+	elif energy_supply_ratio > 1.12:
+		last_energy_report = "Power surplus %.1f%% • grid operating with reserve margin." % ((energy_supply_ratio - 1.0) * 100.0)
+	else:
+		last_energy_report = "National electricity supply meets current demand."
+	for region_name in regional_power_access.keys():
+		var access := float(regional_power_access[region_name])
+		var pressure := supply_gap * 0.08
+		regional_power_access[region_name] = clampf(access - pressure + 0.015, 35.0, 100.0)
+	_update_budget_forecast()
+
 func _initialize_environment() -> void:
 	environment_budget_rate = 0.012
 	monthly_environment_cost = gdp * environment_budget_rate / 12.0
@@ -1733,7 +1897,7 @@ func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
 	monthly_environment_cost = maxf(0.0, gdp) * environment_budget_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate) / 12.0
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate) / 12.0 + monthly_power_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -1800,6 +1964,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	_initialize_government()
 	_initialize_research()
 	_initialize_environment()
+	_initialize_energy()
 	state_changed.emit()
 
 func save_game() -> bool:
@@ -1851,6 +2016,11 @@ func save_game() -> bool:
 		"environmental_quality": environmental_quality, "renewable_energy_share": renewable_energy_share,
 		"disaster_resilience": disaster_resilience, "disaster_cooldown": disaster_cooldown,
 		"disaster_history": disaster_history, "last_disaster_report": last_disaster_report,
+		"power_plants": power_plants, "energy_fuel_reserves": energy_fuel_reserves,
+		"grid_capacity": grid_capacity, "energy_demand": energy_demand, "energy_generation": energy_generation,
+		"energy_supply_ratio": energy_supply_ratio, "energy_price": energy_price, "blackout_risk": blackout_risk,
+		"monthly_power_cost": monthly_power_cost, "regional_power_access": regional_power_access,
+		"last_energy_report": last_energy_report,
 		"regional_funds": regional_funds, "selected_region_name": selected_region_name
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -2005,6 +2175,22 @@ func load_game() -> bool:
 		if typeof(disaster_data) == TYPE_DICTIONARY:
 			disaster_history.append(disaster_data)
 	last_disaster_report = str(data.get("last_disaster_report", "No major natural disasters recorded."))
+	power_plants.clear()
+	for plant_data in data.get("power_plants", []):
+		if typeof(plant_data) == TYPE_DICTIONARY:
+			power_plants.append(plant_data)
+	energy_fuel_reserves = data.get("energy_fuel_reserves", {"coal": 0.0, "gas": 0.0, "uranium": 0.0})
+	grid_capacity = float(data.get("grid_capacity", 0.0))
+	energy_demand = float(data.get("energy_demand", 0.0))
+	energy_generation = float(data.get("energy_generation", 0.0))
+	energy_supply_ratio = float(data.get("energy_supply_ratio", 1.0))
+	energy_price = float(data.get("energy_price", 1200.0))
+	blackout_risk = float(data.get("blackout_risk", 5.0))
+	monthly_power_cost = float(data.get("monthly_power_cost", 0.0))
+	regional_power_access = data.get("regional_power_access", {})
+	last_energy_report = str(data.get("last_energy_report", "National grid operating normally."))
+	if power_plants.is_empty() and not selected_country.is_empty():
+		_initialize_energy()
 	if technology_tree.is_empty():
 		_initialize_research()
 	if political_parties.is_empty() or cabinet.is_empty():

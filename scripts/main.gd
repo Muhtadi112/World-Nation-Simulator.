@@ -44,7 +44,8 @@ func _on_viewport_resized() -> void:
 			"banking": _show_banking(),
 			"government": _show_government(),
 			"research": _show_research(),
-			"environment": _show_environment()
+			"environment": _show_environment(),
+			"energy": _show_energy()
 
 func _clear() -> void:
 	for child in get_children():
@@ -311,6 +312,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("International trade", PANEL_ALT, _show_trade))
 	side.add_child(_button("Research & technology", PANEL_ALT, _show_research))
 	side.add_child(_button("Environment & disasters", PANEL_ALT, _show_environment))
+	side.add_child(_button("Energy & power grid", PANEL_ALT, _show_energy))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
@@ -975,6 +977,65 @@ func _show_environment() -> void:
 		for event in GameState.disaster_history:
 			sections.add_child(_muted_label("%02d/%d  •  %s  •  Severity %.0f/100  •  Estimated damage %s" % [int(event.get("month", 1)), int(event.get("year", 2026)), str(event.get("type", "Event")), float(event.get("severity", 0.0)), _money(float(event.get("damage", 0.0)))]))
 	sections.add_child(_muted_label("Disaster occurrence and damage are abstract game estimates. Hazard weights are not based on precise local geology, elevation, coastlines or live climate data. Environmental indicators are not official scientific measurements."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+func _show_energy() -> void:
+	current_screen = "energy"
+	var body := _base("National energy & power grid", "GENERATION  /  FUEL SECURITY  /  TRANSMISSION  /  REGIONAL ACCESS")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("POWER GENERATION", "%.1f GW" % GameState.energy_generation, "AVAILABLE OUTPUT"))
+	summary.add_child(_stat_card("NATIONAL DEMAND", "%.1f GW" % GameState.energy_demand, "CURRENT LOAD"))
+	summary.add_child(_stat_card("SUPPLY COVERAGE", "%.1f%%" % (GameState.energy_supply_ratio * 100.0), "GENERATION / DEMAND"))
+	summary.add_child(_stat_card("BLACKOUT RISK", "%.1f%%" % GameState.blackout_risk, "SIMPLIFIED GRID RISK"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("GRID STATUS"))
+	sections.add_child(_muted_label("Transmission capacity %.1f GW  •  Energy price %s / unit  •  Monthly power system cost %s" % [GameState.grid_capacity, _money(GameState.energy_price), _money(GameState.monthly_power_cost)]))
+	sections.add_child(_muted_label("Coal reserves %.1f  •  Gas reserves %.1f  •  Uranium reserves %.1f" % [float(GameState.energy_fuel_reserves.get("coal", 0.0)), float(GameState.energy_fuel_reserves.get("gas", 0.0)), float(GameState.energy_fuel_reserves.get("uranium", 0.0))]))
+	sections.add_child(_muted_label("REPORT  /  " + GameState.last_energy_report))
+	sections.add_child(_button("UPGRADE NATIONAL TRANSMISSION GRID  •  %s" % _money(maxf(GameState.gdp * (0.0007 + GameState.grid_capacity / maxf(GameState.energy_demand, 1.0) * 0.00012), 25000000.0)), BLUE, func():
+		if GameState.upgrade_national_grid():
+			_show_energy()
+		else:
+			_show_toast("Grid upgrade unavailable or insufficient treasury.")
+	))
+	sections.add_child(_section_label("POWER GENERATION FLEET"))
+	for plant in GameState.power_plants:
+		sections.add_child(_muted_label("%s  •  %s  •  %.2f GW  •  %s" % [str(plant.get("name", "Power station")), str(plant.get("type", "unknown")).to_upper(), float(plant.get("capacity", 0.0)), "ONLINE" if bool(plant.get("operating", true)) else "OFFLINE"]))
+	sections.add_child(_section_label("BUILD A POWER STATION"))
+	var plant_types := [["coal", "COAL"], ["gas", "NATURAL GAS"], ["nuclear", "NUCLEAR"], ["hydro", "HYDRO"], ["solar", "SOLAR"], ["wind", "WIND"]]
+	for option in plant_types:
+		var kind := str(option[0])
+		var cost := GameState.energy_plant_cost(kind)
+		sections.add_child(_button("%s PLANT  •  %s" % [str(option[1]), _money(cost)], GREEN, func(plant_kind: String = kind):
+			if GameState.build_power_plant(plant_kind):
+				_show_energy()
+			else:
+				_show_toast("Construction failed: insufficient treasury or station limit reached.")
+		))
+	sections.add_child(_section_label("REGIONAL ELECTRICITY DISTRIBUTION"))
+	if GameState.regional_power_access.is_empty():
+		sections.add_child(_muted_label("Regional access data will appear when regional city data is available."))
+	else:
+		for region_name in GameState.regional_power_access.keys():
+			var name := str(region_name)
+			var access := float(GameState.regional_power_access[name])
+			sections.add_child(_button("%s  •  %.1f%% access  •  UPGRADE %s" % [name, access, _money(maxf(GameState.gdp * 0.00025, 15000000.0))], PANEL_ALT, func(region: String = name):
+				if GameState.upgrade_regional_grid(region):
+					_show_energy()
+				else:
+					_show_toast("Regional grid is fully upgraded or treasury is insufficient.")
+			))
+	sections.add_child(_muted_label("Fuel use, generation capacity, grid access and costs are abstract national-level game systems. They do not represent measured power plants or real-time electricity dispatch."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_government() -> void:
