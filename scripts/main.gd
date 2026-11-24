@@ -15,6 +15,7 @@ var content: Control
 var toast_label: Label
 var country_list: VBoxContainer
 var selected_country: Dictionary = {}
+var inspected_country: Dictionary = {}
 var current_screen: String = "home"
 var country_search_text: String = ""
 var country_results: VBoxContainer
@@ -54,6 +55,7 @@ func _on_viewport_resized() -> void:
 			"home": _show_home()
 			"countries": _show_country_select()
 			"dashboard": _show_dashboard()
+			"map_country": _show_map_country_profile()
 			"budget": _show_budget()
 			"world": _show_world_nations()
 			"diplomacy": _show_diplomacy()
@@ -2334,11 +2336,66 @@ func _show_cities() -> void:
 
 
 func _on_map_country_selected(country: Dictionary) -> void:
-	var full_country := GameState.find_country(str(country.get("id", "")))
+	var iso := str(country.get("id", ""))
+	var full_country := GameState.find_country(iso)
 	if full_country.is_empty():
 		full_country = country.duplicate(true)
-	selected_country = full_country
-	_show_toast("Map focus: %s  •  %s" % [full_country.get("name", "Unknown"), full_country.get("id", "")])
+	inspected_country = full_country
+	_show_map_country_profile()
+
+func _show_map_country_profile() -> void:
+	current_screen = "map_country"
+	if inspected_country.is_empty():
+		_show_dashboard()
+		return
+	var iso := str(inspected_country.get("id", ""))
+	var name := str(inspected_country.get("name", "Wilayah tidak dikenal"))
+	var region := str(inspected_country.get("region", "Tidak diketahui"))
+	var capital := str(inspected_country.get("capital", "Belum tersedia"))
+	var currency := str(inspected_country.get("currency", "Belum tersedia"))
+	var population := int(inspected_country.get("population", 0))
+	var gdp := float(inspected_country.get("gdp", 0.0))
+	var flag := str(inspected_country.get("flag", "🌐"))
+	var ai_data: Dictionary = {}
+	for nation in GameState.ai_countries:
+		if str(nation.get("id", "")) == iso:
+			ai_data = nation
+			break
+	if not ai_data.is_empty():
+		population = int(ai_data.get("population", population))
+		gdp = float(ai_data.get("gdp", gdp))
+	var body := _base("%s  %s" % [flag, name], "PROFIL NEGARA  /  PETA DUNIA  /  %s" % iso)
+	var identity := PanelContainer.new()
+	identity.add_theme_stylebox_override("panel", _style(Color("#10283a"), CYAN, 1, 12))
+	body.add_child(identity)
+	var identity_box := VBoxContainer.new()
+	identity_box.add_theme_constant_override("separation", 7)
+	identity.add_child(identity_box)
+	identity_box.add_child(_section_label("RINGKASAN WILAYAH"))
+	identity_box.add_child(_muted_label("Kode ISO: %s  •  Kawasan: %s" % [iso, region]))
+	identity_box.add_child(_muted_label("Ibu kota: %s  •  Mata uang: %s" % [capital, currency]))
+	var stats := GridContainer.new()
+	stats.columns = 2
+	stats.add_theme_constant_override("h_separation", 8)
+	stats.add_theme_constant_override("v_separation", 8)
+	body.add_child(stats)
+	stats.add_child(_stat_card("POPULASI", _format_format_number(population), "ESTIMASI PENDUDUK"))
+	stats.add_child(_stat_card("PDB", _money(gdp), "PRODUK DOMESTIK BRUTO"))
+	if not ai_data.is_empty():
+		stats.add_child(_stat_card("PERTUMBUHAN", "%.1f%%" % float(ai_data.get("growth", 0.0)), "ESTIMASI TAHUNAN"))
+		stats.add_child(_stat_card("STABILITAS", "%.0f/100" % float(ai_data.get("stability", 0.0)), "INDEKS NEGARA"))
+	else:
+		stats.add_child(_stat_card("STATUS SIMULASI", "BELUM AKTIF", "DATA DASAR PETA"))
+		stats.add_child(_stat_card("KAWASAN", region.to_upper(), "KATEGORI GEOGRAFIS"))
+	var note := Label.new()
+	note.text = "Data peta berasal dari Natural Earth dan katalog negara. Negara AI menampilkan indikator simulasi yang dapat berubah setiap bulan."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.add_theme_color_override("font_color", MUTED)
+	note.add_theme_font_size_override("font_size", 11)
+	body.add_child(note)
+	body.add_child(_button("KEMBALI KE PETA DUNIA", BLUE, _show_dashboard))
+	body.add_child(_button("BUKA KOTA & WILAYAH NEGARA AKTIF", PANEL_ALT, _show_cities))
+	body.add_child(_button("MENU UTAMA", PANEL_ALT, _show_home))
 
 func _refresh_dashboard() -> void:
 	if current_screen == "dashboard":
