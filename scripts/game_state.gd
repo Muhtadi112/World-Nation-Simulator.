@@ -26,6 +26,18 @@ var household_credit: float = 0.0
 var nonperforming_loans: float = 0.0
 var monthly_bank_interest: float = 0.0
 var company_loans: Array[Dictionary] = []
+var labor_force: int = 0
+var employed_citizens: int = 0
+var unemployed_citizens: int = 0
+var average_monthly_income: float = 0.0
+var poverty_rate: float = 18.0
+var middle_class_share: float = 65.0
+var wealthy_share: float = 17.0
+var income_inequality: float = 0.36
+var household_consumption: float = 0.0
+var social_welfare_rate: float = 0.02
+var monthly_welfare_cost: float = 0.0
+var social_mobility: float = 50.0
 var infrastructure: Dictionary = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 var city_catalog: Array[Dictionary] = []
 
@@ -476,6 +488,37 @@ func _run_monthly_banking_simulation() -> void:
 	bank_reserves = minf(bank_deposits, maxf(bank_reserves, bank_deposits * reserve_requirement))
 	household_credit = maxf(0.0, household_credit * (1.0 + annual_gdp_growth / 1800.0 + (0.045 - central_bank_rate) * 0.025))
 
+func _run_monthly_social_simulation() -> void:
+	if population <= 0 or gdp <= 0.0:
+		return
+	labor_force = maxi(1, int(float(population) * 0.62))
+	var unemployment_rate := clampf(unemployment, 1.0, 35.0)
+	unemployed_citizens = int(float(labor_force) * unemployment_rate / 100.0)
+	employed_citizens = maxi(0, labor_force - unemployed_citizens)
+	average_monthly_income = gdp / maxf(float(population), 1.0) * 0.62 / 12.0
+	household_consumption = gdp * 0.56 / 12.0
+	var city_satisfaction := 58.0
+	if not cities.is_empty():
+		city_satisfaction = 0.0
+		for city in cities:
+			city_satisfaction += float(city.get("resident_satisfaction", city.get("quality_of_life", 58.0)))
+		city_satisfaction /= float(cities.size())
+	var employment_pressure := maxf(0.0, unemployment_rate - 5.0)
+	var income_pressure := clampf(average_monthly_income / 900.0, 0.0, 1.5)
+	poverty_rate = clampf(18.0 + employment_pressure * 1.15 + maxf(0.0, inflation - 4.0) * 0.28 - social_welfare_rate * 115.0 - (income_pressure - 0.5) * 5.0 - (city_satisfaction - 55.0) * 0.08, 2.0, 65.0)
+	wealthy_share = clampf(10.0 + income_inequality * 12.0 + maxf(0.0, annual_gdp_growth) * 0.15, 8.0, 28.0)
+	middle_class_share = clampf(100.0 - poverty_rate - wealthy_share, 15.0, 85.0)
+	poverty_rate = 100.0 - middle_class_share - wealthy_share
+	income_inequality = clampf(income_inequality + (unemployment_rate - 5.0) * 0.00015 - social_welfare_rate * 0.001 + (annual_gdp_growth - 2.0) * 0.00008, 0.25, 0.65)
+	social_mobility = clampf(45.0 + city_satisfaction * 0.25 + float(infrastructure.get("schools", 0)) * 0.45 + float(infrastructure.get("housing", 0)) * 0.25 - income_inequality * 22.0, 0.0, 100.0)
+	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
+
+func set_social_welfare_rate(new_rate: float) -> void:
+	social_welfare_rate = clampf(new_rate, 0.0, 0.08)
+	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
+	_update_budget_forecast()
+	state_changed.emit()
+
 func _run_monthly_city_simulation() -> void:
 	if cities.is_empty():
 		return
@@ -846,6 +889,7 @@ func _advance_day() -> void:
 		_run_monthly_transport_simulation()
 		_run_monthly_company_simulation()
 		_run_monthly_banking_simulation()
+		_run_monthly_social_simulation()
 		_run_monthly_city_simulation()
 		_update_market_prices()
 		_run_ai_world_simulation()
@@ -857,7 +901,8 @@ func _run_monthly_economy() -> void:
 		return
 	monthly_revenue = gdp * tax_rate / 12.0
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
-	monthly_expenses = gdp * spending_rate / 12.0 + monthly_defense_cost
+	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
+	monthly_expenses = gdp * spending_rate / 12.0 + monthly_defense_cost + monthly_welfare_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 	treasury += monthly_balance
 	if treasury < 0.0:
@@ -1263,6 +1308,18 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	_initialize_cities(country)
 	_initialize_companies()
 	_initialize_banking()
+	labor_force = maxi(1, int(float(population) * 0.62))
+	unemployed_citizens = int(float(labor_force) * unemployment / 100.0)
+	employed_citizens = labor_force - unemployed_citizens
+	average_monthly_income = gdp / maxf(float(population), 1.0) * 0.62 / 12.0
+	poverty_rate = 18.0
+	middle_class_share = 65.0
+	wealthy_share = 17.0
+	income_inequality = 0.36
+	household_consumption = gdp * 0.56 / 12.0
+	social_welfare_rate = 0.02
+	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
+	social_mobility = 50.0
 	transport_routes.clear()
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
 	tanks = maxi(100, int(gdp / 1800000000.0))
@@ -1301,7 +1358,13 @@ func save_game() -> bool:
 		"central_bank_rate": central_bank_rate, "reserve_requirement": reserve_requirement,
 		"bank_deposits": bank_deposits, "bank_reserves": bank_reserves, "bank_loan_book": bank_loan_book,
 		"household_credit": household_credit, "nonperforming_loans": nonperforming_loans,
-		"monthly_bank_interest": monthly_bank_interest, "company_loans": company_loans,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
+		"monthly_bank_interest": monthly_bank_interest, "company_loans": company_loans,
+		"labor_force": labor_force, "employed_citizens": employed_citizens, "unemployed_citizens": unemployed_citizens,
+		"average_monthly_income": average_monthly_income, "poverty_rate": poverty_rate,
+		"middle_class_share": middle_class_share, "wealthy_share": wealthy_share,
+		"income_inequality": income_inequality, "household_consumption": household_consumption,
+		"social_welfare_rate": social_welfare_rate, "monthly_welfare_cost": monthly_welfare_cost,
+		"social_mobility": social_mobility,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -1393,8 +1456,19 @@ func load_game() -> bool:
 	for loan_data in data.get("company_loans", []):
 		if typeof(loan_data) == TYPE_DICTIONARY:
 			company_loans.append(loan_data)
+	labor_force = int(data.get("labor_force", maxi(1, int(float(population) * 0.62))))
+	employed_citizens = int(data.get("employed_citizens", labor_force - int(float(labor_force) * unemployment / 100.0)))
+	unemployed_citizens = int(data.get("unemployed_citizens", labor_force - employed_citizens))
+	average_monthly_income = float(data.get("average_monthly_income", gdp / maxf(float(population), 1.0) * 0.62 / 12.0))
+	poverty_rate = float(data.get("poverty_rate", 18.0))
+	middle_class_share = float(data.get("middle_class_share", 65.0))
+	wealthy_share = float(data.get("wealthy_share", 17.0))
+	income_inequality = float(data.get("income_inequality", 0.36))
+	household_consumption = float(data.get("household_consumption", gdp * 0.56 / 12.0))
+	social_welfare_rate = float(data.get("social_welfare_rate", 0.02))
+	monthly_welfare_cost = float(data.get("monthly_welfare_cost", gdp * social_welfare_rate / 12.0))
+	social_mobility = float(data.get("social_mobility", 50.0))
 	if companies.is_empty() and not cities.is_empty():
-		_initialize_companies()
 	regional_funds = data.get("regional_funds", {})
 	selected_region_name = str(data.get("selected_region_name", ""))
 	if cities.is_empty() and not selected_country.is_empty():

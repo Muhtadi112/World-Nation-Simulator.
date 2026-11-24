@@ -304,6 +304,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Industry & trade", PANEL_ALT, _show_industry))
 	side.add_child(_button("Companies & employment", PANEL_ALT, _show_companies))
 	side.add_child(_button("Banking & central bank", PANEL_ALT, _show_banking))
+	side.add_child(_button("Population & social policy", PANEL_ALT, _show_society))
 	side.add_child(_button("International trade", PANEL_ALT, _show_trade))
 	side.add_child(_action_button("Research", "Technology tree coming in Phase 2"))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
@@ -820,6 +821,47 @@ func _show_transport() -> void:
 	body.add_child(_muted_label("Transport is a strategic prototype: route distance uses city coordinates; traffic and capacity are simplified estimates, not turn-by-turn pathfinding or real road geometry. Rail, air and sea routes require matching terminals at both cities."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
+
+
+func _show_society() -> void:
+	current_screen = "society"
+	var body := _base("Population & social policy", "CITIZENS  /  LABOUR MARKET  /  INCOME DISTRIBUTION")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("POPULATION", _number(GameState.population), "TOTAL RESIDENTS"))
+	summary.add_child(_stat_card("LABOUR FORCE", _number(GameState.labor_force), "62% OF POPULATION ESTIMATE"))
+	summary.add_child(_stat_card("EMPLOYED", _number(GameState.employed_citizens), "WORKING CITIZENS"))
+	summary.add_child(_stat_card("UNEMPLOYED", _number(GameState.unemployed_citizens), "%.1f%% OF LABOUR FORCE" % GameState.unemployment))
+	summary.add_child(_stat_card("AVG MONTHLY INCOME", _money(GameState.average_monthly_income), "MODELLED PER-CAPITA WAGE"))
+	summary.add_child(_stat_card("HOUSEHOLD CONSUMPTION", _money(GameState.household_consumption), "MONTHLY NATIONAL ESTIMATE"))
+	body.add_child(_section_label("INCOME DISTRIBUTION"))
+	var distribution := HFlowContainer.new()
+	distribution.add_theme_constant_override("h_separation", 10)
+	body.add_child(distribution)
+	distribution.add_child(_stat_card("LOW-INCOME / POVERTY", "%.1f%%" % GameState.poverty_rate, "ESTIMATED SHARE"))
+	distribution.add_child(_stat_card("MIDDLE CLASS", "%.1f%%" % GameState.middle_class_share, "ESTIMATED SHARE"))
+	distribution.add_child(_stat_card("WEALTHY", "%.1f%%" % GameState.wealthy_share, "ESTIMATED SHARE"))
+	distribution.add_child(_stat_card("INEQUALITY INDEX", "%.3f" % GameState.income_inequality, "GINI-LIKE INDICATOR"))
+	distribution.add_child(_stat_card("SOCIAL MOBILITY", "%.1f / 100" % GameState.social_mobility, "EDUCATION + CITY SERVICES"))
+	body.add_child(_section_label("SOCIAL WELFARE POLICY"))
+	var welfare_slider := HSlider.new()
+	welfare_slider.min_value = 0.0
+	welfare_slider.max_value = 8.0
+	welfare_slider.step = 0.25
+	welfare_slider.value = GameState.social_welfare_rate * 100.0
+	welfare_slider.custom_minimum_size.x = 280
+	body.add_child(welfare_slider)
+	var welfare_label := _muted_label("Welfare allocation: %.2f%% of GDP • monthly cost %s" % [GameState.social_welfare_rate * 100.0, _money(GameState.monthly_welfare_cost)])
+	body.add_child(welfare_label)
+	welfare_slider.value_changed.connect(func(value: float): welfare_label.text = "Welfare allocation: %.2f%% of GDP • monthly cost %s" % [value, _money(GameState.gdp * value / 1200.0)])
+	body.add_child(_button("APPLY WELFARE POLICY", GREEN, func():
+		GameState.set_social_welfare_rate(welfare_slider.value / 100.0)
+		_show_society()
+	))
+	body.add_child(_muted_label("Income groups, poverty, inequality and social mobility are national-level estimates. They are not individual citizen records, and the current model does not yet simulate each household, occupation or personal salary."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_banking() -> void:
 	current_screen = "banking"
