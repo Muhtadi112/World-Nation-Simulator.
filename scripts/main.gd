@@ -41,6 +41,7 @@ func _on_viewport_resized() -> void:
 			"cities": _show_cities(),
 			"transport": _show_transport()
 			"companies": _show_companies()
+			"banking": _show_banking()
 
 func _clear() -> void:
 	for child in get_children():
@@ -302,6 +303,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Transport network", PANEL_ALT, _show_transport))
 	side.add_child(_button("Industry & trade", PANEL_ALT, _show_industry))
 	side.add_child(_button("Companies & employment", PANEL_ALT, _show_companies))
+	side.add_child(_button("Banking & central bank", PANEL_ALT, _show_banking))
 	side.add_child(_button("International trade", PANEL_ALT, _show_trade))
 	side.add_child(_action_button("Research", "Technology tree coming in Phase 2"))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
@@ -816,6 +818,86 @@ func _show_transport() -> void:
 				_show_toast("Upgrade failed: insufficient funds or facility level cap reached.")
 		))
 	body.add_child(_muted_label("Transport is a strategic prototype: route distance uses city coordinates; traffic and capacity are simplified estimates, not turn-by-turn pathfinding or real road geometry. Rail, air and sea routes require matching terminals at both cities."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+
+func _show_banking() -> void:
+	current_screen = "banking"
+	var body := _base("Banking & central bank", "MONETARY POLICY  /  PRIVATE BANKS  /  BUSINESS CREDIT")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("BANK DEPOSITS", _money(GameState.bank_deposits), "ESTIMATED SYSTEM DEPOSITS"))
+	summary.add_child(_stat_card("BANK RESERVES", _money(GameState.bank_reserves), "LIQUID RESERVE ASSETS"))
+	summary.add_child(_stat_card("LOAN BOOK", _money(GameState.bank_loan_book), "OUTSTANDING COMPANY CREDIT"))
+	summary.add_child(_stat_card("HOUSEHOLD CREDIT", _money(GameState.household_credit), "AGGREGATE ESTIMATE"))
+	summary.add_child(_stat_card("NON-PERFORMING", _money(GameState.nonperforming_loans), "DELINQUENT COMPANY LOANS"))
+	summary.add_child(_stat_card("MONTHLY INTEREST", _money(GameState.monthly_bank_interest), "INTEREST RECEIVED"))
+	body.add_child(_section_label("CENTRAL BANK POLICY RATE"))
+	var rate_slider := HSlider.new()
+	rate_slider.min_value = 0.5
+	rate_slider.max_value = 20.0
+	rate_slider.step = 0.25
+	rate_slider.value = GameState.central_bank_rate * 100.0
+	rate_slider.custom_minimum_size.x = 280
+	body.add_child(rate_slider)
+	var rate_label := _muted_label("Policy interest rate: %.2f%%" % (GameState.central_bank_rate * 100.0))
+	body.add_child(rate_label)
+	rate_slider.value_changed.connect(func(value: float): rate_label.text = "Policy interest rate: %.2f%%" % value)
+	body.add_child(_button("APPLY MONETARY POLICY", BLUE, func():
+		GameState.set_central_bank_rate(rate_slider.value / 100.0)
+		_show_banking()
+	))
+	body.add_child(_section_label("BANK RESERVE REQUIREMENT"))
+	var reserve_slider := HSlider.new()
+	reserve_slider.min_value = 5
+	reserve_slider.max_value = 30
+	reserve_slider.step = 1
+	reserve_slider.value = GameState.reserve_requirement * 100.0
+	reserve_slider.custom_minimum_size.x = 280
+	body.add_child(reserve_slider)
+	var reserve_label := _muted_label("Required reserves: %.0f%%" % (GameState.reserve_requirement * 100.0))
+	body.add_child(reserve_label)
+	reserve_slider.value_changed.connect(func(value: float): reserve_label.text = "Required reserves: %.0f%%" % value)
+	body.add_child(_button("APPLY RESERVE POLICY", PANEL_ALT, func():
+		GameState.set_reserve_requirement(reserve_slider.value / 100.0)
+		_show_banking()
+	))
+	body.add_child(_section_label("ISSUE A BUSINESS LOAN"))
+	var eligible := OptionButton.new()
+	for company in GameState.companies:
+		if str(company.get("status", "Operating")) == "Operating":
+			eligible.add_item(str(company.get("name", "Company")))
+			eligible.set_item_metadata(eligible.item_count - 1, str(company.get("id", "")))
+	body.add_child(eligible)
+	var loan_amount := SpinBox.new()
+	loan_amount.min_value = 1000000
+	loan_amount.max_value = maxf(GameState.banking_available_credit(), 1000000.0)
+	loan_amount.step = 1000000
+	loan_amount.value = minf(25000000.0, loan_amount.max_value)
+	loan_amount.prefix = "$"
+	body.add_child(loan_amount)
+	body.add_child(_button("APPROVE COMPANY LOAN", GREEN, func():
+		if eligible.item_count > 0 and GameState.issue_company_loan(str(eligible.get_item_metadata(eligible.selected)), loan_amount.value):
+			_show_banking()
+		else:
+			_show_toast("Loan rejected: check company status, credit limit or bank liquidity.")
+	))
+	body.add_child(_section_label("CORPORATE LOAN REGISTER"))
+	if GameState.company_loans.is_empty():
+		body.add_child(_muted_label("No business loans have been issued."))
+	else:
+		var loan_scroll := ScrollContainer.new()
+		loan_scroll.custom_minimum_size.y = 170
+		loan_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		body.add_child(loan_scroll)
+		var loan_rows := VBoxContainer.new()
+		loan_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		loan_scroll.add_child(loan_rows)
+		for loan in GameState.company_loans:
+			loan_rows.add_child(_muted_label("%s  •  Outstanding %s  •  Rate %.2f%%  •  %s  •  Missed %d" % [str(loan.get("company_name", "Company")), _money(float(loan.get("balance", 0.0))), float(loan.get("annual_rate", 0.0)) * 100.0, str(loan.get("status", "Performing")), int(loan.get("missed_payments", 0))]))
+	body.add_child(_muted_label("Banking is an aggregate prototype: deposits, household credit and reserves are estimated national balances, not individual citizen accounts or independently simulated bank institutions. Business loans are issued against company revenue and repaid from company cash reserves."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_companies() -> void:

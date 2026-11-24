@@ -17,6 +17,15 @@ var companies: Array[Dictionary] = []
 var corporate_tax_rate: float = 0.18
 var monthly_corporate_tax: float = 0.0
 var private_sector_jobs: int = 0
+var central_bank_rate: float = 0.045
+var reserve_requirement: float = 0.10
+var bank_deposits: float = 0.0
+var bank_reserves: float = 0.0
+var bank_loan_book: float = 0.0
+var household_credit: float = 0.0
+var nonperforming_loans: float = 0.0
+var monthly_bank_interest: float = 0.0
+var company_loans: Array[Dictionary] = []
 var infrastructure: Dictionary = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 var city_catalog: Array[Dictionary] = []
 
@@ -356,6 +365,116 @@ func _run_monthly_company_simulation() -> void:
 			total_profit += maxf(0.0, float(company.get("profit", 0.0)))
 	treasury += monthly_corporate_tax
 	gdp += total_profit * 0.08
+
+
+func _initialize_banking() -> void:
+	central_bank_rate = 0.045
+	reserve_requirement = 0.10
+	bank_deposits = maxf(gdp * 0.42, 100000000.0)
+	bank_reserves = bank_deposits * reserve_requirement
+	bank_loan_book = 0.0
+	household_credit = population * maxf(gdp / maxf(float(population), 1.0) * 0.12, 100.0)
+	nonperforming_loans = 0.0
+	monthly_bank_interest = 0.0
+	company_loans.clear()
+
+func banking_available_credit() -> float:
+	return maxf(0.0, bank_deposits - bank_deposits * reserve_requirement + bank_reserves - bank_loan_book)
+
+func set_central_bank_rate(new_rate: float) -> void:
+	central_bank_rate = clampf(new_rate, 0.005, 0.20)
+	state_changed.emit()
+
+func set_reserve_requirement(new_ratio: float) -> void:
+	reserve_requirement = clampf(new_ratio, 0.05, 0.30)
+	bank_reserves = maxf(bank_reserves, bank_deposits * reserve_requirement)
+	state_changed.emit()
+
+func issue_company_loan(company_id: String, principal: float) -> bool:
+	if principal <= 0.0 or company_loans.size() >= 2000:
+		return false
+	var company_index := -1
+	for index in range(companies.size()):
+		if str(companies[index].get("id", "")) == company_id and str(companies[index].get("status", "Operating")) == "Operating":
+			company_index = index
+			break
+	if company_index < 0:
+		return false
+	var company: Dictionary = companies[company_index]
+	var revenue := maxf(float(company.get("revenue", 0.0)), 1.0)
+	var existing_debt := float(company.get("loan_balance", 0.0))
+	var loan_limit := maxf(revenue * 4.0 - existing_debt, 0.0)
+	var amount := minf(principal, loan_limit)
+	if amount < 1000000.0 or amount > banking_available_credit():
+		return false
+	var rate := central_bank_rate + 0.04
+	company["loan_balance"] = existing_debt + amount
+	company["cash_reserves"] = float(company.get("cash_reserves", 0.0)) + amount
+	companies[company_index] = company
+	company_loans.append({
+		"id": company_id + "_LOAN_" + str(Time.get_ticks_msec()),
+		"company_id": company_id, "company_name": str(company.get("name", "Company")),
+		"principal": amount, "balance": amount, "annual_rate": rate,
+		"monthly_payment": amount * 0.04 + amount * rate / 12.0,
+		"missed_payments": 0, "status": "Performing"
+	})
+	bank_loan_book += amount
+	bank_reserves = maxf(0.0, bank_reserves - amount * 0.15)
+	state_changed.emit()
+	return true
+
+func _run_monthly_banking_simulation() -> void:
+	monthly_bank_interest = 0.0
+	var total_npl := 0.0
+	for index in range(company_loans.size()):
+		var loan: Dictionary = company_loans[index]
+		if str(loan.get("status", "Performing")) == "Repaid":
+			continue
+		var balance := maxf(0.0, float(loan.get("balance", 0.0)))
+		var annual_rate := maxf(0.0, central_bank_rate + 0.04)
+		var interest := balance * annual_rate / 12.0
+		var principal_payment := minf(balance, float(loan.get("principal", balance)) * 0.04)
+		var payment := interest + principal_payment
+		var paid := false
+		for company_index in range(companies.size()):
+			if str(companies[company_index].get("id", "")) == str(loan.get("company_id", "")):
+				var company: Dictionary = companies[company_index]
+				var cash := float(company.get("cash_reserves", 0.0))
+				if cash >= payment:
+					company["cash_reserves"] = cash - payment
+					company["loan_balance"] = maxf(0.0, float(company.get("loan_balance", balance)) - principal_payment)
+					companies[company_index] = company
+					paid = true
+				break
+		if paid:
+			balance = maxf(0.0, balance - principal_payment)
+			monthly_bank_interest += interest
+			bank_reserves += payment * 0.12
+			loan["missed_payments"] = 0
+			if balance <= 1.0:
+				balance = 0.0
+				loan["status"] = "Repaid"
+		else:
+			loan["missed_payments"] = int(loan.get("missed_payments", 0)) + 1
+			if int(loan.get("missed_payments", 0)) >= 3:
+				loan["status"] = "Non-performing"
+		loan["balance"] = balance
+		loan["annual_rate"] = annual_rate
+		loan["monthly_payment"] = payment
+		company_loans[index] = loan
+	bank_loan_book = 0.0
+	for loan in company_loans:
+		if str(loan.get("status", "")) != "Repaid":
+			bank_loan_book += float(loan.get("balance", 0.0))
+		if str(loan.get("status", "")) == "Non-performing":
+			total_npl += float(loan.get("balance", 0.0))
+	nonperforming_loans = total_npl
+	var policy_gap := central_bank_rate - 0.045
+	inflation = clampf(inflation - policy_gap * 0.18, 0.0, 40.0)
+	annual_gdp_growth = clampf(annual_gdp_growth - policy_gap * 0.12, -5.0, 15.0)
+	bank_deposits = maxf(bank_deposits * (1.0 + annual_gdp_growth / 1200.0), bank_loan_book * 1.05)
+	bank_reserves = minf(bank_deposits, maxf(bank_reserves, bank_deposits * reserve_requirement))
+	household_credit = maxf(0.0, household_credit * (1.0 + annual_gdp_growth / 1800.0 + (0.045 - central_bank_rate) * 0.025))
 
 func _run_monthly_city_simulation() -> void:
 	if cities.is_empty():
@@ -726,6 +845,7 @@ func _advance_day() -> void:
 		_run_monthly_infrastructure()
 		_run_monthly_transport_simulation()
 		_run_monthly_company_simulation()
+		_run_monthly_banking_simulation()
 		_run_monthly_city_simulation()
 		_update_market_prices()
 		_run_ai_world_simulation()
@@ -1142,6 +1262,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	infrastructure = {"roads": 12, "power": 10, "ports": 4, "airports": 3, "hospitals": 8, "schools": 10, "housing": 12}
 	_initialize_cities(country)
 	_initialize_companies()
+	_initialize_banking()
 	transport_routes.clear()
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
 	tanks = maxi(100, int(gdp / 1800000000.0))
@@ -1176,7 +1297,11 @@ func save_game() -> bool:
 		"trade_imports": trade_imports, "trade_balance": trade_balance,
 		"trade_tariff_rate": trade_tariff_rate, "last_trade_report": last_trade_report,
 		"infrastructure": infrastructure, "cities": cities, "selected_city_id": selected_city_id,
-		"transport_routes": transport_routes, "companies": companies, "corporate_tax_rate": corporate_tax_rate, "monthly_corporate_tax": monthly_corporate_tax, "private_sector_jobs": private_sector_jobs,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
+		"transport_routes": transport_routes, "companies": companies, "corporate_tax_rate": corporate_tax_rate, "monthly_corporate_tax": monthly_corporate_tax, "private_sector_jobs": private_sector_jobs,
+		"central_bank_rate": central_bank_rate, "reserve_requirement": reserve_requirement,
+		"bank_deposits": bank_deposits, "bank_reserves": bank_reserves, "bank_loan_book": bank_loan_book,
+		"household_credit": household_credit, "nonperforming_loans": nonperforming_loans,
+		"monthly_bank_interest": monthly_bank_interest, "company_loans": company_loans,\n\t\t"regional_funds": regional_funds, "selected_region_name": selected_region_name
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
@@ -1256,6 +1381,18 @@ func load_game() -> bool:
 	corporate_tax_rate = float(data.get("corporate_tax_rate", 0.18))
 	monthly_corporate_tax = float(data.get("monthly_corporate_tax", 0.0))
 	private_sector_jobs = int(data.get("private_sector_jobs", 0))
+	central_bank_rate = float(data.get("central_bank_rate", 0.045))
+	reserve_requirement = float(data.get("reserve_requirement", 0.10))
+	bank_deposits = float(data.get("bank_deposits", maxf(gdp * 0.42, 100000000.0)))
+	bank_reserves = float(data.get("bank_reserves", bank_deposits * reserve_requirement))
+	bank_loan_book = float(data.get("bank_loan_book", 0.0))
+	household_credit = float(data.get("household_credit", population * maxf(gdp / maxf(float(population), 1.0) * 0.12, 100.0)))
+	nonperforming_loans = float(data.get("nonperforming_loans", 0.0))
+	monthly_bank_interest = float(data.get("monthly_bank_interest", 0.0))
+	company_loans.clear()
+	for loan_data in data.get("company_loans", []):
+		if typeof(loan_data) == TYPE_DICTIONARY:
+			company_loans.append(loan_data)
 	if companies.is_empty() and not cities.is_empty():
 		_initialize_companies()
 	regional_funds = data.get("regional_funds", {})
