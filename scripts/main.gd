@@ -96,13 +96,13 @@ func _base(title: String, subtitle: String) -> VBoxContainer:
 	header.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 0, 0))
 	root.add_child(header)
 	var brand := Label.new()
-	brand.text = "WN  /  WORLD NATION SIMULATOR"
+	brand.text = "WN  /  SIMULATOR NEGARA DUNIA"
 	brand.add_theme_font_size_override("font_size", 18)
 	brand.add_theme_color_override("font_color", CYAN)
 	brand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(brand)
 	var status := Label.new()
-	status.text = "OFFLINE  •  PHASE 01"
+	status.text = "OFFLINE  •  FASE 01"
 	status.add_theme_color_override("font_color", GREEN)
 	status.add_theme_font_size_override("font_size", 11)
 	status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -121,12 +121,12 @@ func _base(title: String, subtitle: String) -> VBoxContainer:
 	body.add_theme_constant_override("margin_bottom", 20)
 	scroll.add_child(body)
 	var heading := Label.new()
-	heading.text = title
+	heading.text = _id_text(title)
 	heading.add_theme_font_size_override("font_size", 28)
 	heading.add_theme_color_override("font_color", TEXT)
 	body.add_child(heading)
 	var sub := Label.new()
-	sub.text = subtitle
+	sub.text = _id_text(subtitle)
 	sub.add_theme_font_size_override("font_size", 12)
 	sub.add_theme_color_override("font_color", MUTED)
 	body.add_child(sub)
@@ -135,42 +135,76 @@ func _base(title: String, subtitle: String) -> VBoxContainer:
 
 func _show_home() -> void:
 	current_screen = "home"
-	var body := _base("Build your world.", "A living world simulation. Shape nations, economies and cities.")
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_child(spacer)
-	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(0, 245)
-	card.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 18))
-	body.add_child(card)
-	var inner := VBoxContainer.new()
-	inner.add_theme_constant_override("separation", 12)
-	card.add_child(inner)
+	var body := _base("BANGUN DUNIAMU.", "SIMULASI DUNIA YANG HIDUP. BENTUK NEGARA, EKONOMI, DAN KOTA.")
+	body.add_theme_constant_override("separation", 14)
+
+	var hero := PanelContainer.new()
+	hero.custom_minimum_size = Vector2(0, 174)
+	hero.add_theme_stylebox_override("panel", _style(Color("#10283a"), Color("#35c8dc"), 2, 16))
+	body.add_child(hero)
+	var hero_inner := VBoxContainer.new()
+	hero_inner.add_theme_constant_override("separation", 10)
+	hero.add_child(hero_inner)
 	var eyebrow := Label.new()
-	eyebrow.text = "YOUR NEXT CHAPTER"
+	eyebrow.text = "> BABAK BARU DIMULAI"
 	eyebrow.add_theme_color_override("font_color", CYAN)
-	eyebrow.add_theme_font_size_override("font_size", 11)
-	inner.add_child(eyebrow)
+	eyebrow.add_theme_font_size_override("font_size", 12)
+	hero_inner.add_child(eyebrow)
 	var tagline := Label.new()
-	tagline.text = "One planet. Hundreds of nations.\nYour decisions shape the future."
-	tagline.add_theme_font_size_override("font_size", 25)
+	tagline.text = "SATU PLANET.\nRATUSAN NEGARA.\nMASA DEPAN ADA DI TANGANMU."
+	tagline.add_theme_font_size_override("font_size", 23)
 	tagline.add_theme_color_override("font_color", TEXT)
-	inner.add_child(tagline)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	inner.add_child(row)
-	row.add_child(_button("NEW CAREER", BLUE, func(): GameState.game_mode = "Career"; _show_country_select()))
-	row.add_child(_button("SANDBOX", GREEN, func(): GameState.game_mode = "Sandbox"; _show_country_select()))
-	var continue_button := _button("CONTINUE SAVE", PANEL_ALT, _continue_game)
-	row.add_child(continue_button)
+	tagline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hero_inner.add_child(tagline)
+	var description := Label.new()
+	description.text = "Setiap keputusan mengubah arah dunia."
+	description.add_theme_color_override("font_color", Color("#8edee7"))
+	description.add_theme_font_size_override("font_size", 12)
+	hero_inner.add_child(description)
+
+	var map_panel := PanelContainer.new()
+	map_panel.custom_minimum_size = Vector2(0, 330)
+	map_panel.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 12))
+	body.add_child(map_panel)
+	var map_column := VBoxContainer.new()
+	map_column.add_theme_constant_override("separation", 6)
+	map_panel.add_child(map_column)
+	var map_heading := Label.new()
+	map_heading.text = "PETA INTELIJEN DUNIA  /  177 WILAYAH"
+	map_heading.add_theme_color_override("font_color", CYAN)
+	map_heading.add_theme_font_size_override("font_size", 11)
+	map_column.add_child(map_heading)
+	var map := Control.new()
+	map.set_script(load("res://scripts/world_map.gd"))
+	map.custom_minimum_size = Vector2(0, 285)
+	map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	map_column.add_child(map)
+
+	var actions := VBoxContainer.new()
+	actions.add_theme_constant_override("separation", 10)
+	body.add_child(actions)
+	var career := _button("KARIER BARU     →", BLUE, func(): GameState.game_mode = "Career"; _show_country_select())
+	career.custom_minimum_size.y = 66
+	career.add_theme_font_size_override("font_size", 20)
+	career.add_theme_stylebox_override("normal", _style(Color("#123f68"), Color("#42b9ef"), 2, 12))
+	actions.add_child(career)
+	var sandbox := _button("MODE SANDBOX     ◈", GREEN, func(): GameState.game_mode = "Sandbox"; _show_country_select())
+	sandbox.custom_minimum_size.y = 66
+	sandbox.add_theme_font_size_override("font_size", 20)
+	sandbox.add_theme_stylebox_override("normal", _style(Color("#104b45"), Color("#42dfba"), 2, 12))
+	actions.add_child(sandbox)
+	var continue_button := _button("LANJUTKAN SIMPANAN", PANEL_ALT, _continue_game)
+	continue_button.custom_minimum_size.y = 58
+	continue_button.add_theme_font_size_override("font_size", 17)
+	actions.add_child(continue_button)
+
 	var footer := Label.new()
-	footer.text = "GODOT 4  •  SINGLE PLAYER  •  LOCAL SAVE"
+	footer.text = "GODOT 4  •  PEMAIN TUNGGAL  •  SIMPANAN LOKAL"
 	footer.add_theme_color_override("font_color", MUTED)
 	footer.add_theme_font_size_override("font_size", 10)
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.add_child(footer)
-	var bottom_spacer := Control.new()
-	bottom_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_child(bottom_spacer)
 
 func _show_country_select() -> void:
 	current_screen = "countries"
@@ -2356,6 +2390,65 @@ func _objective_card(objective: Dictionary) -> PanelContainer:
 	column.add_child(value)
 	return panel
 
+func _id_text(value: String) -> String:
+	var result := value
+	var translations := {
+		"Choose your nation": "PILIH NEGARAMU",
+		"Career begins in 2026. Select a country to start the simulation.": "KARIER DIMULAI PADA 2026. PILIH NEGARA UNTUK MEMULAI SIMULASI.",
+		"COUNTRY DATABASE": "DATABASE NEGARA",
+		"COUNTRY PROFILE": "PROFIL NEGARA",
+		"Capital:": "Ibu kota:",
+		"Population:": "Populasi:",
+		"Currency:": "Mata uang:",
+		"START SIMULATION": "MULAI SIMULASI",
+		"BACK": "KEMBALI",
+		"BACK TO NATION": "KEMBALI KE NEGARA",
+		"MAIN MENU": "MENU UTAMA",
+		"NATIONAL OVERVIEW": "RINGKASAN NASIONAL",
+		"NATIONAL OBJECTIVES": "TARGET NASIONAL",
+		"GOVERNMENT & SECURITY": "PEMERINTAHAN & KEAMANAN",
+		"ECONOMY & DEVELOPMENT": "EKONOMI & PEMBANGUNAN",
+		"NATIONAL SYSTEMS": "SISTEM NASIONAL",
+		"National budget": "Anggaran negara",
+		"World nations / AI": "Negara dunia / AI",
+		"Cabinet & ministries": "Kabinet & kementerian",
+		"Diplomacy": "Diplomasi",
+		"Military & defense": "Militer & pertahanan",
+		"Infrastructure": "Infrastruktur",
+		"Cities & regions": "Kota & wilayah",
+		"Transport network": "Jaringan transportasi",
+		"Industry & resources": "Industri & sumber daya",
+		"Companies & jobs": "Perusahaan & pekerjaan",
+		"Banking & central bank": "Perbankan & bank sentral",
+		"Population & welfare": "Penduduk & kesejahteraan",
+		"International trade": "Perdagangan internasional",
+		"Research & technology": "Riset & teknologi",
+		"Energy & power": "Energi & listrik",
+		"Environment & disasters": "Lingkungan & bencana",
+		"Space agency": "Badan antariksa",
+		"Intelligence & cyber": "Intelijen & siber",
+		"Immigration": "Imigrasi",
+		"Media & public opinion": "Media & opini publik",
+		"Healthcare & education": "Kesehatan & pendidikan",
+		"Culture & tourism": "Budaya & pariwisata",
+		"PAUSE": "JEDA",
+		"RESUME": "LANJUT",
+		"SAVE": "SIMPAN",
+		"POPULATION": "POPULASI",
+		"TREASURY": "KAS NEGARA",
+		"INFLATION": "INFLASI",
+		"UNEMPLOYMENT": "PENGANGGURAN",
+		"PUBLIC DEBT": "UTANG PUBLIK",
+		"GDP GROWTH": "PERTUMBUHAN PDB",
+		"ANNUAL": "TAHUNAN",
+		"OFFLINE": "LURING",
+		"World nations": "Negara-negara dunia",
+		"International trade": "Perdagangan internasional"
+	}
+	for english in translations:
+		result = result.replace(english, translations[english])
+	return result
+
 func _stat_card(label: String, value: String, foot: String) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2364,7 +2457,7 @@ func _stat_card(label: String, value: String, foot: String) -> PanelContainer:
 	column.add_theme_constant_override("separation", 5)
 	panel.add_child(column)
 	var top := Label.new()
-	top.text = label
+	top.text = _id_text(label)
 	top.add_theme_font_size_override("font_size", 10)
 	top.add_theme_color_override("font_color", MUTED)
 	column.add_child(top)
@@ -2374,7 +2467,7 @@ func _stat_card(label: String, value: String, foot: String) -> PanelContainer:
 	number.add_theme_color_override("font_color", TEXT)
 	column.add_child(number)
 	var bottom := Label.new()
-	bottom.text = foot
+	bottom.text = _id_text(foot)
 	bottom.add_theme_font_size_override("font_size", 9)
 	bottom.add_theme_color_override("font_color", GREEN)
 	column.add_child(bottom)
@@ -2382,7 +2475,7 @@ func _stat_card(label: String, value: String, foot: String) -> PanelContainer:
 
 func _button(label: String, color: Color, action: Callable) -> Button:
 	var button := Button.new()
-	button.text = label
+	button.text = _id_text(label)
 	button.custom_minimum_size = Vector2(0, 40)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.add_theme_color_override("font_color", TEXT)
@@ -2395,7 +2488,7 @@ func _button(label: String, color: Color, action: Callable) -> Button:
 
 func _section_label(text_value: String) -> Label:
 	var label := Label.new()
-	label.text = text_value
+	label.text = _id_text(text_value)
 	label.add_theme_color_override("font_color", GOLD)
 	label.add_theme_font_size_override("font_size", 10)
 	return label
