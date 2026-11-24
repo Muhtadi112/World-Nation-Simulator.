@@ -91,8 +91,8 @@ func _base(title: String, subtitle: String) -> VBoxContainer:
 	root.add_theme_constant_override("separation", 0)
 	add_child(root)
 	var header := HBoxContainer.new()
-	header.custom_minimum_size.y = 76
-	header.add_theme_constant_override("separation", 18)
+	header.custom_minimum_size.y = 58
+	header.add_theme_constant_override("separation", 10)
 	header.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 0, 0))
 	root.add_child(header)
 	var brand := Label.new()
@@ -107,15 +107,19 @@ func _base(title: String, subtitle: String) -> VBoxContainer:
 	status.add_theme_font_size_override("font_size", 11)
 	status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	header.add_child(status)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	root.add_child(scroll)
 	var body := VBoxContainer.new()
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 14)
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 12)
 	body.add_theme_stylebox_override("panel", _style(BG, BG, 0, 0))
-	body.add_theme_constant_override("margin_left", 28)
-	body.add_theme_constant_override("margin_right", 28)
-	body.add_theme_constant_override("margin_top", 22)
-	body.add_theme_constant_override("margin_bottom", 18)
-	root.add_child(body)
+	body.add_theme_constant_override("margin_left", 16)
+	body.add_theme_constant_override("margin_right", 16)
+	body.add_theme_constant_override("margin_top", 16)
+	body.add_theme_constant_override("margin_bottom", 20)
+	scroll.add_child(body)
 	var heading := Label.new()
 	heading.text = title
 	heading.add_theme_font_size_override("font_size", 28)
@@ -171,9 +175,9 @@ func _show_home() -> void:
 func _show_country_select() -> void:
 	current_screen = "countries"
 	var body := _base("Choose your nation", "Career begins in 2026. Select a country to start the simulation.")
-	var split := HBoxContainer.new()
+	var split := VBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_theme_constant_override("separation", 18)
+	split.add_theme_constant_override("separation", 12)
 	body.add_child(split)
 	var left := PanelContainer.new()
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -205,7 +209,7 @@ func _show_country_select() -> void:
 	_populate_country_results()
 
 	var right := PanelContainer.new()
-	right.custom_minimum_size.x = 340
+	right.custom_minimum_size.y = 230
 	right.add_theme_stylebox_override("panel", _style(PANEL, BORDER, 1, 14))
 	split.add_child(right)
 	var detail := VBoxContainer.new()
@@ -279,8 +283,9 @@ func _show_dashboard() -> void:
 		_show_country_select()
 		return
 	var body := _base("%s  %s" % [country.get("flag", ""), country.get("name", "Nation")], "NATIONAL OVERVIEW  /  %s  /  %s" % [country.get("capital", ""), GameState.game_mode.to_upper()])
-	var toolbar := HBoxContainer.new()
-	toolbar.add_theme_constant_override("separation", 10)
+	var toolbar := HFlowContainer.new()
+	toolbar.add_theme_constant_override("h_separation", 6)
+	toolbar.add_theme_constant_override("v_separation", 6)
 	body.add_child(toolbar)
 	var date_label := Label.new()
 	date_label.text = "📅  %s" % GameState.formatted_date()
@@ -291,8 +296,10 @@ func _show_dashboard() -> void:
 	for speed in [1, 2, 5, 10]:
 		toolbar.add_child(_button("%dx" % speed, BLUE if GameState.simulation_speed == speed else PANEL_ALT, func(s: int = speed): GameState.simulation_speed = s; GameState.is_paused = false; _show_dashboard()))
 	toolbar.add_child(_button("SAVE", GREEN, _save_game))
-	var stats := HBoxContainer.new()
-	stats.add_theme_constant_override("separation", 10)
+	var stats := GridContainer.new()
+	stats.columns = 2
+	stats.add_theme_constant_override("h_separation", 8)
+	stats.add_theme_constant_override("v_separation", 8)
 	body.add_child(stats)
 	stats.add_child(_stat_card("POPULATION", _format_format_number(GameState.population), "NATIONAL RESIDENTS"))
 	stats.add_child(_stat_card("GDP", _money(GameState.gdp), "NATIONAL OUTPUT"))
@@ -301,7 +308,7 @@ func _show_dashboard() -> void:
 	stats.add_child(_stat_card("UNEMPLOYMENT", "%.1f%%" % GameState.unemployment, "LABOR MARKET"))
 	stats.add_child(_stat_card("PUBLIC DEBT", _money(GameState.debt), "GOVERNMENT LIABILITIES"))
 	stats.add_child(_stat_card("GDP GROWTH", "%.1f%%" % GameState.annual_gdp_growth, "ANNUAL ESTIMATE"))
-	var main_row := HBoxContainer.new()
+	var main_row := VBoxContainer.new()
 	main_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_row.add_theme_constant_override("separation", 12)
 	body.add_child(main_row)
@@ -319,11 +326,13 @@ func _show_dashboard() -> void:
 	map_column.add_child(map_title)
 	var map := Control.new()
 	map.set_script(load("res://scripts/world_map.gd"))
+	map.custom_minimum_size = Vector2(0, 360)
+	map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	map_column.add_child(map)
 	map.connect("country_selected", Callable(self, "_on_map_country_selected"))
 	var side := VBoxContainer.new()
-	side.custom_minimum_size.x = 250
+	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	side.add_theme_constant_override("separation", 8)
 	main_row.add_child(side)
 	side.add_child(_section_label("GOVERNMENT"))
@@ -353,6 +362,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Culture, tourism & heritage", PANEL_ALT, _show_tourism))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
 	note.add_theme_color_override("font_color", MUTED)
 	note.add_theme_font_size_override("font_size", 10)
