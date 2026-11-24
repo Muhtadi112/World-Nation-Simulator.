@@ -1035,6 +1035,7 @@ func _advance_day() -> void:
 		_run_monthly_intelligence()
 		_run_monthly_immigration()
 		_run_monthly_media()
+		_run_monthly_tourism()
 		_run_monthly_environment()
 		_update_government_monthly()
 		_run_monthly_city_simulation()
@@ -1046,11 +1047,12 @@ func _advance_day() -> void:
 func _run_monthly_economy() -> void:
 	if gdp <= 0.0:
 		return
-	monthly_revenue = gdp * tax_rate / 12.0
+	monthly_revenue = gdp * tax_rate / 12.0 + monthly_tourism_revenue * 0.08
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
 	monthly_environment_cost = gdp * environment_budget_rate / 12.0
-	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate + media_budget_rate + healthcare_budget_rate + education_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost + monthly_power_cost
+	monthly_tourism_cost = gdp * tourism_budget_rate / 12.0
+	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate + media_budget_rate + healthcare_budget_rate + education_budget_rate + tourism_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost + monthly_power_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 	treasury += monthly_balance
 	if treasury < 0.0:
@@ -2817,7 +2819,8 @@ func _update_budget_forecast() -> void:
 	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0 + maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
 	monthly_environment_cost = maxf(0.0, gdp) * environment_budget_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate + intelligence_budget_rate + media_budget_rate + healthcare_budget_rate + education_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost + monthly_intelligence_cost + monthly_immigration_cost
+	monthly_tourism_cost = maxf(0.0, gdp) * tourism_budget_rate / 12.0
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate + space_program_budget_rate + intelligence_budget_rate + media_budget_rate + healthcare_budget_rate + education_budget_rate + tourism_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost + monthly_space_cost + monthly_intelligence_cost + monthly_immigration_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -2872,6 +2875,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
 	social_mobility = 50.0
 	_initialize_public_services()
+	_initialize_tourism()
 	_update_budget_forecast()
 	transport_routes.clear()
 	military_personnel = maxi(50000, int(float(population) * 0.0012))
@@ -2997,6 +3001,14 @@ func save_game() -> bool:
 		"monthly_media_cost": monthly_media_cost, "tv_stations": tv_stations,
 		"newspaper_groups": newspaper_groups, "digital_networks": digital_networks,
 		"media_report": media_report, "media_campaign_cooldown": media_campaign_cooldown,
+		"tourism_budget_rate": tourism_budget_rate, "monthly_tourism_cost": monthly_tourism_cost,
+		"tourism_attractiveness": tourism_attractiveness, "tourism_capacity": tourism_capacity,
+		"tourism_satisfaction": tourism_satisfaction, "tourism_safety": tourism_safety,
+		"visa_access": visa_access, "heritage_preservation": heritage_preservation, "cultural_influence": cultural_influence,
+		"annual_tourist_arrivals": annual_tourist_arrivals, "monthly_tourist_arrivals": monthly_tourist_arrivals,
+		"tourism_revenue": tourism_revenue, "monthly_tourism_revenue": monthly_tourism_revenue,
+		"tourism_employment": tourism_employment, "heritage_sites": heritage_sites,
+		"tourism_event_cooldown": tourism_event_cooldown, "last_tourism_report": last_tourism_report,
 		"environment_budget_rate": environment_budget_rate, "monthly_environment_cost": monthly_environment_cost,
 		"carbon_emissions": carbon_emissions, "air_pollution": air_pollution, "water_pollution": water_pollution,
 		"forest_cover": forest_cover, "climate_risk": climate_risk, "biodiversity": biodiversity,
@@ -3219,6 +3231,28 @@ func load_game() -> bool:
 	digital_networks = int(data.get("digital_networks", 1))
 	media_report = str(data.get("media_report", "National media institutions established."))
 	media_campaign_cooldown = int(data.get("media_campaign_cooldown", 0))
+	tourism_budget_rate = float(data.get("tourism_budget_rate", 0.004))
+	monthly_tourism_cost = float(data.get("monthly_tourism_cost", gdp * tourism_budget_rate / 12.0))
+	tourism_attractiveness = float(data.get("tourism_attractiveness", 48.0))
+	tourism_capacity = float(data.get("tourism_capacity", 35.0))
+	tourism_satisfaction = float(data.get("tourism_satisfaction", 62.0))
+	tourism_safety = float(data.get("tourism_safety", 68.0))
+	visa_access = float(data.get("visa_access", 45.0))
+	heritage_preservation = float(data.get("heritage_preservation", 58.0))
+	cultural_influence = float(data.get("cultural_influence", 24.0))
+	annual_tourist_arrivals = int(data.get("annual_tourist_arrivals", int(float(population) * 0.025)))
+	monthly_tourist_arrivals = int(data.get("monthly_tourist_arrivals", int(float(annual_tourist_arrivals) / 12.0)))
+	tourism_revenue = float(data.get("tourism_revenue", gdp * 0.018))
+	monthly_tourism_revenue = float(data.get("monthly_tourism_revenue", tourism_revenue / 12.0))
+	tourism_employment = int(data.get("tourism_employment", int(float(population) * 0.008)))
+	heritage_sites.clear()
+	for site_data in data.get("heritage_sites", []):
+		if typeof(site_data) == TYPE_DICTIONARY:
+			heritage_sites.append(site_data)
+	tourism_event_cooldown = int(data.get("tourism_event_cooldown", 0))
+	last_tourism_report = str(data.get("last_tourism_report", "Tourism indicators loaded."))
+	if heritage_sites.is_empty() and not selected_country.is_empty():
+		_initialize_tourism()
 	environment_budget_rate = float(data.get("environment_budget_rate", 0.012))
 	monthly_environment_cost = float(data.get("monthly_environment_cost", 0.0))
 	carbon_emissions = float(data.get("carbon_emissions", maxf(1.0, float(population) / 1000000.0 * 0.42)))
