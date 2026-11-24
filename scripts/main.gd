@@ -782,7 +782,7 @@ func _show_transport() -> void:
 		builder_box.add_child(_button("CONSTRUCT ROAD CONNECTION", BLUE, func():
 			var a := str(GameState.cities[from_picker.selected].get("id", ""))
 			var b := str(GameState.cities[to_picker.selected].get("id", ""))
-			var mode := ["road", "rail", "air", "sea"][mode_picker.selected]
+			var mode: String = ["road", "rail", "air", "sea"][mode_picker.selected]
 			if GameState.build_transport_route(a, b, mode):
 				_show_transport()
 			else:
