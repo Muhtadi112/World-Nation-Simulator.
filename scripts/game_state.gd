@@ -95,6 +95,21 @@ var citizenship_applications: int = 0
 var citizenship_granted: int = 0
 var passport_access: float = 60.0
 var passports_issued: int = 0
+var media_freedom: float = 62.0
+var media_trust: float = 54.0
+var media_reach: float = 38.0
+var media_literacy: float = 42.0
+var misinformation_pressure: float = 24.0
+var public_polarization: float = 32.0
+var press_safety: float = 58.0
+var media_regulation: float = 35.0
+var media_budget_rate: float = 0.003
+var monthly_media_cost: float = 0.0
+var tv_stations: int = 2
+var newspaper_groups: int = 3
+var digital_networks: int = 1
+var media_report: String = "National media institutions established."
+var media_campaign_cooldown: int = 0
 
 var government_type: String = "Constitutional democracy"
 var government_approval: float = 58.0
@@ -987,6 +1002,7 @@ func _advance_day() -> void:
 		_run_monthly_space_program()
 		_run_monthly_intelligence()
 		_run_monthly_immigration()
+		_run_monthly_media()
 		_run_monthly_environment()
 		_update_government_monthly()
 		_run_monthly_city_simulation()
@@ -1002,7 +1018,7 @@ func _run_monthly_economy() -> void:
 	monthly_defense_cost = gdp * defense_budget_rate / 12.0
 	monthly_welfare_cost = gdp * social_welfare_rate / 12.0
 	monthly_environment_cost = gdp * environment_budget_rate / 12.0
-	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost + monthly_power_cost
+	monthly_expenses = gdp * (spending_rate + research_budget_rate + environment_budget_rate + media_budget_rate) / 12.0 + monthly_defense_cost + monthly_welfare_cost + monthly_power_cost + monthly_media_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 	treasury += monthly_balance
 	if treasury < 0.0:
@@ -2458,6 +2474,100 @@ func issue_passports() -> bool:
 	state_changed.emit()
 	return true
 
+
+func _initialize_media() -> void:
+	media_freedom = 62.0
+	media_trust = 54.0
+	media_reach = 38.0
+	media_literacy = 42.0
+	misinformation_pressure = 24.0
+	public_polarization = 32.0
+	press_safety = 58.0
+	media_regulation = 35.0
+	media_budget_rate = 0.003
+	monthly_media_cost = 0.0
+	tv_stations = 2
+	newspaper_groups = 3
+	digital_networks = 1
+	media_report = "Independent and public media institutions established."
+	media_campaign_cooldown = 0
+
+func media_investment_cost(kind: String) -> float:
+	var multiplier := {"tv": 0.0008, "newspaper": 0.00025, "digital": 0.00055}
+	if not multiplier.has(kind):
+		return -1.0
+	var level := int({"tv": tv_stations, "newspaper": newspaper_groups, "digital": digital_networks}[kind])
+	if level >= 30:
+		return -1.0
+	return maxf(gdp * float(multiplier[kind]) * float(level + 1), 2500000.0)
+
+func invest_in_media(kind: String) -> bool:
+	var cost := media_investment_cost(kind)
+	if cost < 0.0 or treasury < cost:
+		return false
+	treasury -= cost
+	match kind:
+		"tv": tv_stations += 1
+		"newspaper": newspaper_groups += 1
+		"digital": digital_networks += 1
+	media_reach = clampf(media_reach + (3.0 if kind == "digital" else 2.0), 0.0, 100.0)
+	media_report = "New %s institution opened. Media reach improved." % kind
+	state_changed.emit()
+	return true
+
+func set_media_policy(freedom: float, regulation: float, literacy: float, budget: float) -> void:
+	media_freedom = clampf(freedom, 0.0, 100.0)
+	media_regulation = clampf(regulation, 0.0, 100.0)
+	media_literacy = clampf(literacy, 0.0, 100.0)
+	media_budget_rate = clampf(budget, 0.001, 0.02)
+	_update_budget_forecast()
+	state_changed.emit()
+
+func run_media_campaign(kind: String) -> bool:
+	if media_campaign_cooldown > 0:
+		return false
+	var cost := gdp * (0.00035 if kind == "public_info" else (0.0005 if kind == "literacy" else 0.0007))
+	if not ["public_info", "literacy", "propaganda"].has(kind) or treasury < cost:
+		return false
+	treasury -= cost
+	media_campaign_cooldown = 2
+	if kind == "public_info":
+		media_trust = clampf(media_trust + 3.0, 0.0, 100.0)
+		government_approval = clampf(government_approval + 1.5, 0.0, 100.0)
+		media_report = "Public information campaign improved access to verified public updates."
+	elif kind == "literacy":
+		media_literacy = clampf(media_literacy + 4.0, 0.0, 100.0)
+		misinformation_pressure = clampf(misinformation_pressure - 4.0, 0.0, 100.0)
+		public_polarization = clampf(public_polarization - 2.0, 0.0, 100.0)
+		media_report = "Media literacy campaign strengthened critical evaluation of information."
+	else:
+		media_freedom = clampf(media_freedom - 3.0, 0.0, 100.0)
+		media_trust = clampf(media_trust - 4.0, 0.0, 100.0)
+		public_polarization = clampf(public_polarization + 5.0, 0.0, 100.0)
+		government_approval = clampf(government_approval + 1.0, 0.0, 100.0)
+		media_report = "State propaganda produced a short-lived approval bump while damaging trust and increasing polarization."
+	_update_budget_forecast()
+	state_changed.emit()
+	return true
+
+func _run_monthly_media() -> void:
+	if media_campaign_cooldown > 0:
+		media_campaign_cooldown -= 1
+	monthly_media_cost = gdp * media_budget_rate / 12.0
+	var institution_reach := float(tv_stations) * 1.5 + float(newspaper_groups) * 0.7 + float(digital_networks) * 2.2
+	media_reach = clampf(media_reach + (institution_reach - 8.0) * 0.025, 0.0, 100.0)
+	var trust_change := (media_freedom - 50.0) * 0.012 + (media_literacy - 50.0) * 0.008 + (press_safety - 50.0) * 0.01 - misinformation_pressure * 0.009 - public_polarization * 0.004
+	media_trust = clampf(media_trust + trust_change, 0.0, 100.0)
+	misinformation_pressure = clampf(misinformation_pressure + (25.0 - media_literacy) * 0.012 + (35.0 - media_regulation) * 0.004 - media_literacy * 0.003, 0.0, 100.0)
+	public_polarization = clampf(public_polarization + (misinformation_pressure - 30.0) * 0.008 - (media_literacy - 50.0) * 0.006, 0.0, 100.0)
+	press_safety = clampf(press_safety + (media_freedom - press_safety) * 0.015 - maxf(0.0, public_polarization - 65.0) * 0.012, 0.0, 100.0)
+	var approval_effect := (media_trust - 50.0) * 0.012 - maxf(0.0, misinformation_pressure - 40.0) * 0.008 - maxf(0.0, public_polarization - 60.0) * 0.006
+	government_approval = clampf(government_approval + approval_effect, 5.0, 95.0)
+	if media_trust < 25.0 or misinformation_pressure > 75.0:
+		stability = clampf(stability - 0.15, 0.0, 100.0)
+	media_report = "Trust %.1f • Reach %.1f • Disinformation pressure %.1f • Polarization %.1f." % [media_trust, media_reach, misinformation_pressure, public_polarization]
+	_update_budget_forecast()
+
 func _run_monthly_immigration() -> void:
 	var arrivals := 0
 	var departures := 0
@@ -2594,6 +2704,7 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	citizenship_granted = 0
 	passport_access = 60.0
 	passports_issued = 0
+	_initialize_media()
 	_initialize_environment()
 	_initialize_energy()
 	_initialize_mining()
@@ -2659,6 +2770,13 @@ func save_game() -> bool:
 		"monthly_immigration_cost": monthly_immigration_cost, "immigration_report": immigration_report,
 		"citizenship_applications": citizenship_applications, "citizenship_granted": citizenship_granted,
 		"passport_access": passport_access, "passports_issued": passports_issued,
+		"media_freedom": media_freedom, "media_trust": media_trust, "media_reach": media_reach,
+		"media_literacy": media_literacy, "misinformation_pressure": misinformation_pressure,
+		"public_polarization": public_polarization, "press_safety": press_safety,
+		"media_regulation": media_regulation, "media_budget_rate": media_budget_rate,
+		"monthly_media_cost": monthly_media_cost, "tv_stations": tv_stations,
+		"newspaper_groups": newspaper_groups, "digital_networks": digital_networks,
+		"media_report": media_report, "media_campaign_cooldown": media_campaign_cooldown,
 		"environment_budget_rate": environment_budget_rate, "monthly_environment_cost": monthly_environment_cost,
 		"carbon_emissions": carbon_emissions, "air_pollution": air_pollution, "water_pollution": water_pollution,
 		"forest_cover": forest_cover, "climate_risk": climate_risk, "biodiversity": biodiversity,
@@ -2851,6 +2969,21 @@ func load_game() -> bool:
 	citizenship_granted = int(data.get("citizenship_granted", 0))
 	passport_access = float(data.get("passport_access", 60.0))
 	passports_issued = int(data.get("passports_issued", 0))
+	media_freedom = float(data.get("media_freedom", 62.0))
+	media_trust = float(data.get("media_trust", 54.0))
+	media_reach = float(data.get("media_reach", 38.0))
+	media_literacy = float(data.get("media_literacy", 42.0))
+	misinformation_pressure = float(data.get("misinformation_pressure", 24.0))
+	public_polarization = float(data.get("public_polarization", 32.0))
+	press_safety = float(data.get("press_safety", 58.0))
+	media_regulation = float(data.get("media_regulation", 35.0))
+	media_budget_rate = float(data.get("media_budget_rate", 0.003))
+	monthly_media_cost = float(data.get("monthly_media_cost", 0.0))
+	tv_stations = int(data.get("tv_stations", 2))
+	newspaper_groups = int(data.get("newspaper_groups", 3))
+	digital_networks = int(data.get("digital_networks", 1))
+	media_report = str(data.get("media_report", "National media institutions established."))
+	media_campaign_cooldown = int(data.get("media_campaign_cooldown", 0))
 	environment_budget_rate = float(data.get("environment_budget_rate", 0.012))
 	monthly_environment_cost = float(data.get("monthly_environment_cost", 0.0))
 	carbon_emissions = float(data.get("carbon_emissions", maxf(1.0, float(population) / 1000000.0 * 0.42)))

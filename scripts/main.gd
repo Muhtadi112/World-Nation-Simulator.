@@ -49,7 +49,8 @@ func _on_viewport_resized() -> void:
 			"mining": _show_mining(),
 			"space": _show_space(),
 			"intelligence": _show_intelligence(),
-			"immigration": _show_immigration()
+			"immigration": _show_immigration(),
+			"media": _show_media()
 
 func _clear() -> void:
 	for child in get_children():
@@ -321,6 +322,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Space agency & exploration", PANEL_ALT, _show_space))
 	side.add_child(_button("Intelligence & cyber security", PANEL_ALT, _show_intelligence))
 	side.add_child(_button("Immigration & citizenship", PANEL_ALT, _show_immigration))
+	side.add_child(_button("National media & public opinion", PANEL_ALT, _show_media))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
@@ -839,6 +841,101 @@ func _show_transport() -> void:
 
 
 
+
+
+func _show_media() -> void:
+	current_screen = "media"
+	var body := _base("National media & public opinion", "PRESS FREEDOM  /  PUBLIC TRUST  /  INFORMATION RESILIENCE")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("MEDIA TRUST", "%.1f / 100" % GameState.media_trust, "PUBLIC CONFIDENCE"))
+	summary.add_child(_stat_card("MEDIA REACH", "%.1f / 100" % GameState.media_reach, "INFORMATION ACCESS"))
+	summary.add_child(_stat_card("PRESS FREEDOM", "%.1f / 100" % GameState.media_freedom, "EDITORIAL INDEPENDENCE"))
+	summary.add_child(_stat_card("PUBLIC APPROVAL", "%.1f%%" % GameState.government_approval, "GOVERNMENT APPROVAL"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 10)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("MEDIA ECOSYSTEM"))
+	sections.add_child(_muted_label("TV stations: %d  •  Newspaper groups: %d  •  Digital networks: %d" % [GameState.tv_stations, GameState.newspaper_groups, GameState.digital_networks]))
+	sections.add_child(_muted_label("Misinformation pressure %.1f  •  Polarization %.1f  •  Press safety %.1f  •  Monthly public media cost %s" % [GameState.misinformation_pressure, GameState.public_polarization, GameState.press_safety, _money(GameState.monthly_media_cost)]))
+	for kind in ["tv", "newspaper", "digital"]:
+		var title := {"tv": "BUILD TV STATION", "newspaper": "ESTABLISH NEWSPAPER GROUP", "digital": "EXPAND DIGITAL NETWORK"}[kind]
+		sections.add_child(_button("%s  •  %s" % [title, _money(GameState.media_investment_cost(kind))], BLUE, func(k: String = kind):
+			if GameState.invest_in_media(k):
+				_show_media()
+			else:
+				_show_toast("Investment failed: insufficient treasury or institution level cap reached.")
+		))
+	sections.add_child(_section_label("MEDIA POLICY SETTINGS"))
+	var freedom := HSlider.new()
+	freedom.min_value = 0
+	freedom.max_value = 100
+	freedom.step = 5
+	freedom.value = GameState.media_freedom
+	sections.add_child(freedom)
+	var freedom_label := _muted_label("Press freedom: %.0f / 100" % freedom.value)
+	sections.add_child(freedom_label)
+	freedom.value_changed.connect(func(v: float): freedom_label.text = "Press freedom: %.0f / 100" % v)
+	var regulation := HSlider.new()
+	regulation.min_value = 0
+	regulation.max_value = 100
+	regulation.step = 5
+	regulation.value = GameState.media_regulation
+	sections.add_child(regulation)
+	var regulation_label := _muted_label("Media regulation: %.0f / 100" % regulation.value)
+	sections.add_child(regulation_label)
+	regulation.value_changed.connect(func(v: float): regulation_label.text = "Media regulation: %.0f / 100" % v)
+	var literacy := HSlider.new()
+	literacy.min_value = 0
+	literacy.max_value = 100
+	literacy.step = 5
+	literacy.value = GameState.media_literacy
+	sections.add_child(literacy)
+	var literacy_label := _muted_label("Public media literacy: %.0f / 100" % literacy.value)
+	sections.add_child(literacy_label)
+	literacy.value_changed.connect(func(v: float): literacy_label.text = "Public media literacy: %.0f / 100" % v)
+	var funding := HSlider.new()
+	funding.min_value = 0.1
+	funding.max_value = 2.0
+	funding.step = 0.1
+	funding.value = GameState.media_budget_rate * 100.0
+	sections.add_child(funding)
+	var funding_label := _muted_label("Public media budget: %.1f%% GDP" % funding.value)
+	sections.add_child(funding_label)
+	funding.value_changed.connect(func(v: float): funding_label.text = "Public media budget: %.1f%% GDP" % v)
+	sections.add_child(_button("APPLY MEDIA POLICY", GREEN, func():
+		GameState.set_media_policy(freedom.value, regulation.value, literacy.value, funding.value / 100.0)
+		_show_media()
+	))
+	sections.add_child(_section_label("PUBLIC INFORMATION PROGRAMS"))
+	sections.add_child(_button("PUBLIC INFORMATION CAMPAIGN", BLUE, func():
+		if GameState.run_media_campaign("public_info"):
+			_show_media()
+		else:
+			_show_toast("Campaign unavailable: check treasury and two-month cooldown.")
+	))
+	sections.add_child(_button("MEDIA LITERACY PROGRAM", GREEN, func():
+		if GameState.run_media_campaign("literacy"):
+			_show_media()
+		else:
+			_show_toast("Campaign unavailable: check treasury and two-month cooldown.")
+	))
+	sections.add_child(_button("STATE PROPAGANDA CAMPAIGN  •  HIGH SOCIAL COST", GOLD, func():
+		if GameState.run_media_campaign("propaganda"):
+			_show_media()
+		else:
+			_show_toast("Campaign unavailable: check treasury and two-month cooldown.")
+	))
+	sections.add_child(_muted_label("Campaign cooldown: %d months  •  %s" % [GameState.media_campaign_cooldown, GameState.media_report]))
+	sections.add_child(_muted_label("This is an abstract fictional simulation. Propaganda has explicit trust, freedom and polarization penalties; it does not model real-world targeting or persuasion tactics."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_immigration() -> void:
 	current_screen = "immigration"
