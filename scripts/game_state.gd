@@ -779,6 +779,18 @@ var industrial_output: float = 0.0
 var industrial_jobs: int = 0
 var average_industrial_wage: float = 0.0
 var resource_stockpiles: Dictionary = {"food": 0.0, "energy": 0.0, "metals": 0.0, "goods": 0.0}
+var mining_resources: Array[String] = ["gold", "coal", "iron", "copper", "uranium", "oil", "natural_gas", "bauxite", "rare_earths", "lithium"]
+var resource_reserves: Dictionary = {}
+var resource_inventory: Dictionary = {}
+var resource_market_prices: Dictionary = {}
+var mining_sites: Array[Dictionary] = []
+var exploration_count: Dictionary = {}
+var resource_production: Dictionary = {}
+var mining_jobs: int = 0
+var mining_tax_rate: float = 0.08
+var monthly_mining_revenue: float = 0.0
+var monthly_mining_cost: float = 0.0
+var mining_report: String = "No mining operations established."
 var power_plants: Array[Dictionary] = []
 var energy_fuel_reserves: Dictionary = {"coal": 0.0, "gas": 0.0, "uranium": 0.0}
 var grid_capacity: float = 0.0
@@ -932,6 +944,7 @@ func _advance_day() -> void:
 	if month_changed:
 		_run_monthly_economy()
 		_run_monthly_energy()
+		_run_monthly_mining()
 		_run_monthly_industry()
 		_run_monthly_infrastructure()
 		_run_monthly_transport_simulation()
@@ -1124,6 +1137,13 @@ func _initialize_ai_countries() -> void:
 			"energy": base_gdp / 1000000000.0 * 1.8,
 			"metals": base_gdp / 10000000000.0 * 2.5,
 			"goods": base_gdp / 10000000000.0 * 1.7
+		},
+		"resource_inventory": {
+			"gold": base_gdp / 1000000000000.0 * 0.08, "coal": base_gdp / 1000000000.0 * 0.35,
+			"iron": base_gdp / 1000000000.0 * 0.28, "copper": base_gdp / 1000000000.0 * 0.12,
+			"uranium": base_gdp / 1000000000.0 * 0.015, "oil": base_gdp / 1000000000.0 * 0.20,
+			"natural_gas": base_gdp / 1000000000.0 * 0.18, "bauxite": base_gdp / 1000000000.0 * 0.16,
+			"rare_earths": base_gdp / 1000000000.0 * 0.025, "lithium": base_gdp / 1000000000.0 * 0.035
 		}
 		})
 
@@ -1488,6 +1508,207 @@ func hold_election(early: bool = true) -> bool:
 	last_election_report = "Election complete: %s leads with %d seats. Coalition holds %d of %d seats." % [winner_id.replace("_", " ").capitalize(), maxi(0, winner_seats), government_coalition_seats(), parliament_seats]
 	state_changed.emit()
 	return true
+
+
+func _initialize_mining() -> void:
+	resource_reserves.clear()
+	resource_inventory.clear()
+	resource_market_prices = {"gold": 62000.0, "coal": 120.0, "iron": 145.0, "copper": 9200.0, "uranium": 85000.0, "oil": 78.0, "natural_gas": 42.0, "bauxite": 68.0, "rare_earths": 12500.0, "lithium": 14500.0}
+	resource_production.clear()
+	exploration_count.clear()
+	mining_sites.clear()
+	mining_jobs = 0
+	mining_tax_rate = 0.08
+	monthly_mining_revenue = 0.0
+	monthly_mining_cost = 0.0
+	var country_id := str(selected_country.get("id", "AAA"))
+	var seed_value := abs(country_id.hash())
+	for index in range(mining_resources.size()):
+		var resource := mining_resources[index]
+		var variation := 0.45 + float(posmod(seed_value / (index + 1) + index * 173, 1100)) / 1000.0
+		resource_reserves[resource] = maxf(0.0, gdp / 1000000000.0 * variation * (1.0 + float(index % 4) * 0.35))
+		resource_inventory[resource] = 0.0
+		resource_production[resource] = 0.0
+		exploration_count[resource] = 0
+	for resource in ["coal", "iron"]:
+		var reserve := float(resource_reserves.get(resource, 0.0))
+		if reserve > 0.0:
+			mining_sites.append({"id": "MINE_%s_001" % resource.to_upper(), "resource": resource, "region": "National Territory", "level": 1, "capacity": maxf(0.2, reserve * 0.025), "workers": maxi(80, int(float(population) * 0.000015)), "operating": true})
+	mining_report = "National geological survey initialized with abstract gameplay deposits."
+	_run_monthly_mining()
+
+func resource_exploration_cost(resource: String) -> float:
+	if not mining_resources.has(resource) or int(exploration_count.get(resource, 0)) >= 5:
+		return -1.0
+	return maxf(gdp * 0.00018, 12000000.0) * (1.0 + float(exploration_count.get(resource, 0)) * 0.55)
+
+func explore_resource(resource: String) -> bool:
+	var cost := resource_exploration_cost(resource)
+	if cost < 0.0 or treasury < cost:
+		return false
+	treasury -= cost
+	var attempts := int(exploration_count.get(resource, 0))
+	var seed_text := "%s_%s_%d_%d" % [str(selected_country.get("id", "AAA")), resource, int(game_date.get("year", 2026)), attempts]
+	var discovery_roll := posmod(seed_text.hash(), 100)
+	var discovered := 0.0
+	if discovery_roll < 78:
+		var size_factor := 0.08 + float(posmod(seed_text.hash() / 7, 100)) / 100.0
+		discovered = maxf(0.5, gdp / 1000000000.0 * size_factor)
+		resource_reserves[resource] = float(resource_reserves.get(resource, 0.0)) + discovered
+		mining_report = "Survey discovered %.2f abstract units of %s deposits." % [discovered, resource.replace("_", " ")]
+	else:
+		mining_report = "Survey found no commercially viable %s deposit." % resource.replace("_", " ")
+	exploration_count[resource] = attempts + 1
+	state_changed.emit()
+	return true
+
+func mine_construction_cost(resource: String) -> float:
+	if not mining_resources.has(resource) or float(resource_reserves.get(resource, 0.0)) <= 0.0 or mining_sites.size() >= 100:
+		return -1.0
+	return maxf(gdp * 0.00032, 18000000.0)
+
+func open_mine(resource: String, region_name: String) -> bool:
+	var cost := mine_construction_cost(resource)
+	if cost < 0.0 or treasury < cost:
+		return false
+	var region_exists := false
+	for region in get_regions():
+		if str(region.get("name", "")) == region_name:
+			region_exists = true
+			break
+	if not region_exists:
+		region_name = "National Territory"
+	treasury -= cost
+	var site_number := 1
+	for site in mining_sites:
+		if str(site.get("resource", "")) == resource:
+			site_number += 1
+	var capacity := maxf(0.15, float(resource_reserves.get(resource, 0.0)) * 0.018)
+	var workers := maxi(60, int(float(population) * 0.000012))
+	mining_sites.append({"id": "MINE_%s_%03d" % [resource.to_upper(), site_number], "resource": resource, "region": region_name, "level": 1, "capacity": capacity, "workers": workers, "operating": true})
+	mining_report = "%s mine commissioned in %s." % [resource.replace("_", " ").capitalize(), region_name]
+	state_changed.emit()
+	return true
+
+func mine_upgrade_cost(site_id: String) -> float:
+	for site in mining_sites:
+		if str(site.get("id", "")) == site_id:
+			var level := int(site.get("level", 1))
+			if level >= 10:
+				return -1.0
+			return maxf(gdp * (0.00012 + float(level) * 0.00006), 8000000.0)
+	return -1.0
+
+func upgrade_mine(site_id: String) -> bool:
+	var cost := mine_upgrade_cost(site_id)
+	if cost < 0.0 or treasury < cost:
+		return false
+	for index in range(mining_sites.size()):
+		var site: Dictionary = mining_sites[index]
+		if str(site.get("id", "")) == site_id:
+			site["level"] = int(site.get("level", 1)) + 1
+			site["capacity"] = float(site.get("capacity", 0.0)) * 1.22
+			site["workers"] = int(float(site.get("workers", 0)) * 1.15)
+			mining_sites[index] = site
+			treasury -= cost
+			mining_report = "%s upgraded to level %d." % [site_id, int(site["level"])]
+			state_changed.emit()
+			return true
+	return false
+
+func set_mining_tax(new_rate: float) -> void:
+	mining_tax_rate = clampf(new_rate, 0.02, 0.30)
+	state_changed.emit()
+
+func trade_natural_resource_with_country(country_id: String, resource: String, direction: String, quantity: float) -> bool:
+	if not mining_resources.has(resource) or not diplomacy_relations.has(country_id):
+		return false
+	var treaty: Dictionary = diplomacy_relations[country_id]
+	if not bool(treaty.get("trade_agreement", false)) or bool(treaty.get("at_war", false)) or bool(treaty.get("sanctions", false)):
+		return false
+	if quantity <= 0.0 or quantity > 100000.0 or not ["import", "export"].has(direction):
+		return false
+	var nation := get_ai_country(country_id)
+	if nation.is_empty():
+		return false
+	var partner_inventory: Dictionary = nation.get("resource_inventory", {})
+	var partner_treasury := float(nation.get("treasury", 0.0))
+	var value := float(resource_market_prices.get(resource, 100.0)) * quantity
+	if direction == "export":
+		var available := float(resource_inventory.get(resource, 0.0))
+		if available < quantity or partner_treasury < value:
+			return false
+		resource_inventory[resource] = available - quantity
+		partner_inventory[resource] = float(partner_inventory.get(resource, 0.0)) + quantity
+		partner_treasury -= value
+		treasury += value
+		trade_exports += value
+		trade_balance += value
+	else:
+		var available_partner := float(partner_inventory.get(resource, 0.0))
+		var tariff := value * trade_tariff_rate
+		if available_partner < quantity or treasury < value + tariff:
+			return false
+		partner_inventory[resource] = available_partner - quantity
+		resource_inventory[resource] = float(resource_inventory.get(resource, 0.0)) + quantity
+		partner_treasury += value
+		treasury -= value + tariff
+		trade_imports += value
+		trade_balance -= value
+	for index in range(ai_countries.size()):
+		if str(ai_countries[index].get("id", "")) == country_id:
+			var updated: Dictionary = ai_countries[index]
+			updated["treasury"] = partner_treasury
+			updated["resource_inventory"] = partner_inventory
+			ai_countries[index] = updated
+			break
+	mining_report = "%s %.2f units of %s with %s for %s." % [direction.capitalize(), quantity, resource.replace("_", " "), str(nation.get("name", country_id)), _format_trade_money(value)]
+	state_changed.emit()
+	return true
+
+func _run_monthly_mining() -> void:
+	resource_production.clear()
+	for resource in mining_resources:
+		resource_production[resource] = 0.0
+	mining_jobs = 0
+	monthly_mining_revenue = 0.0
+	monthly_mining_cost = 0.0
+	for index in range(mining_sites.size()):
+		var site: Dictionary = mining_sites[index]
+		if not bool(site.get("operating", true)):
+			continue
+		var resource := str(site.get("resource", ""))
+		if not mining_resources.has(resource):
+			continue
+		var capacity := maxf(0.0, float(site.get("capacity", 0.0)))
+		var available := maxf(0.0, float(resource_reserves.get(resource, 0.0)))
+		var output := minf(capacity, available)
+		resource_reserves[resource] = maxf(0.0, available - output)
+		resource_production[resource] = float(resource_production.get(resource, 0.0)) + output
+		resource_inventory[resource] = float(resource_inventory.get(resource, 0.0)) + output
+		mining_jobs += int(site.get("workers", 0))
+		var price := float(resource_market_prices.get(resource, 100.0))
+		monthly_mining_revenue += output * price
+		monthly_mining_cost += output * price * 0.34
+		if resource == "coal":
+			energy_fuel_reserves["coal"] = float(energy_fuel_reserves.get("coal", 0.0)) + output * 0.12
+		elif resource == "natural_gas":
+			energy_fuel_reserves["gas"] = float(energy_fuel_reserves.get("gas", 0.0)) + output * 0.12
+		elif resource == "uranium":
+			energy_fuel_reserves["uranium"] = float(energy_fuel_reserves.get("uranium", 0.0)) + output * 0.08
+		if resource in ["iron", "copper", "bauxite", "lithium", "rare_earths", "gold"]:
+			resource_stockpiles["metals"] = float(resource_stockpiles.get("metals", 0.0)) + output * 0.05
+		if resource in ["coal", "oil", "natural_gas"]:
+			resource_stockpiles["energy"] = float(resource_stockpiles.get("energy", 0.0)) + output * 0.025
+	var tax_income := maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate
+	treasury += tax_income
+	if mining_sites.size() > 0:
+		var mine_pressure := minf(0.18, float(mining_jobs) / maxf(float(population), 1.0) * 0.0007)
+		air_pollution = clampf(air_pollution + mine_pressure, 0.0, 100.0)
+		water_pollution = clampf(water_pollution + mine_pressure * 0.65, 0.0, 100.0)
+		forest_cover = clampf(forest_cover - mine_pressure * 0.025, 2.0, 95.0)
+	mining_report = "%d mine sites produced resources worth %s; tax receipts %s." % [mining_sites.size(), _format_trade_money(monthly_mining_revenue), _format_trade_money(tax_income)]
+	_update_budget_forecast()
 
 func _initialize_energy() -> void:
 	power_plants.clear()
@@ -1894,10 +2115,10 @@ func _apply_technology_effect(technology_id: String) -> void:
 	_update_budget_forecast()
 
 func _update_budget_forecast() -> void:
-	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0
+	monthly_revenue = maxf(0.0, gdp) * tax_rate / 12.0 + maxf(0.0, monthly_mining_revenue - monthly_mining_cost) * mining_tax_rate
 	monthly_welfare_cost = maxf(0.0, gdp) * social_welfare_rate / 12.0
 	monthly_environment_cost = maxf(0.0, gdp) * environment_budget_rate / 12.0
-	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate) / 12.0 + monthly_power_cost
+	monthly_expenses = maxf(0.0, gdp) * (spending_rate + defense_budget_rate + social_welfare_rate + research_budget_rate + environment_budget_rate) / 12.0 + monthly_power_cost + monthly_mining_cost
 	monthly_balance = monthly_revenue - monthly_expenses
 
 func set_budget_policy(new_tax_rate: float, new_spending_rate: float) -> void:
@@ -1965,6 +2186,8 @@ func start_new_game(mode: String, country: Dictionary) -> void:
 	_initialize_research()
 	_initialize_environment()
 	_initialize_energy()
+	_initialize_mining()
+	_update_budget_forecast()
 	state_changed.emit()
 
 func save_game() -> bool:
@@ -2021,6 +2244,12 @@ func save_game() -> bool:
 		"energy_supply_ratio": energy_supply_ratio, "energy_price": energy_price, "blackout_risk": blackout_risk,
 		"monthly_power_cost": monthly_power_cost, "regional_power_access": regional_power_access,
 		"last_energy_report": last_energy_report,
+		"resource_reserves": resource_reserves, "resource_inventory": resource_inventory,
+		"resource_market_prices": resource_market_prices, "mining_sites": mining_sites,
+		"exploration_count": exploration_count, "resource_production": resource_production,
+		"mining_jobs": mining_jobs, "mining_tax_rate": mining_tax_rate,
+		"monthly_mining_revenue": monthly_mining_revenue, "monthly_mining_cost": monthly_mining_cost,
+		"mining_report": mining_report,
 		"regional_funds": regional_funds, "selected_region_name": selected_region_name
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -2189,6 +2418,22 @@ func load_game() -> bool:
 	monthly_power_cost = float(data.get("monthly_power_cost", 0.0))
 	regional_power_access = data.get("regional_power_access", {})
 	last_energy_report = str(data.get("last_energy_report", "National grid operating normally."))
+	resource_reserves = data.get("resource_reserves", {})
+	resource_inventory = data.get("resource_inventory", {})
+	resource_market_prices = data.get("resource_market_prices", {})
+	mining_sites.clear()
+	for mine_data in data.get("mining_sites", []):
+		if typeof(mine_data) == TYPE_DICTIONARY:
+			mining_sites.append(mine_data)
+	exploration_count = data.get("exploration_count", {})
+	resource_production = data.get("resource_production", {})
+	mining_jobs = int(data.get("mining_jobs", 0))
+	mining_tax_rate = float(data.get("mining_tax_rate", 0.08))
+	monthly_mining_revenue = float(data.get("monthly_mining_revenue", 0.0))
+	monthly_mining_cost = float(data.get("monthly_mining_cost", 0.0))
+	mining_report = str(data.get("mining_report", "No mining operations established."))
+	if resource_reserves.is_empty() and not selected_country.is_empty():
+		_initialize_mining()
 	if power_plants.is_empty() and not selected_country.is_empty():
 		_initialize_energy()
 	if technology_tree.is_empty():

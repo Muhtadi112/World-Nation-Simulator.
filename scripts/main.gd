@@ -45,7 +45,8 @@ func _on_viewport_resized() -> void:
 			"government": _show_government(),
 			"research": _show_research(),
 			"environment": _show_environment(),
-			"energy": _show_energy()
+			"energy": _show_energy(),
+			"mining": _show_mining()
 
 func _clear() -> void:
 	for child in get_children():
@@ -313,6 +314,7 @@ func _show_dashboard() -> void:
 	side.add_child(_button("Research & technology", PANEL_ALT, _show_research))
 	side.add_child(_button("Environment & disasters", PANEL_ALT, _show_environment))
 	side.add_child(_button("Energy & power grid", PANEL_ALT, _show_energy))
+	side.add_child(_button("Mining & natural resources", PANEL_ALT, _show_mining))
 	side.add_child(_button("MAIN MENU", PANEL_ALT, _show_home))
 	var note := Label.new()
 	note.text = "Monthly economic simulation • 177 mapped features • historical baseline estimates (2019)."
@@ -977,6 +979,125 @@ func _show_environment() -> void:
 		for event in GameState.disaster_history:
 			sections.add_child(_muted_label("%02d/%d  •  %s  •  Severity %.0f/100  •  Estimated damage %s" % [int(event.get("month", 1)), int(event.get("year", 2026)), str(event.get("type", "Event")), float(event.get("severity", 0.0)), _money(float(event.get("damage", 0.0)))]))
 	sections.add_child(_muted_label("Disaster occurrence and damage are abstract game estimates. Hazard weights are not based on precise local geology, elevation, coastlines or live climate data. Environmental indicators are not official scientific measurements."))
+	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
+
+
+func _show_mining() -> void:
+	current_screen = "mining"
+	var body := _base("Mining & natural resources", "GEOLOGICAL SURVEYS  /  EXTRACTION  /  COMMODITY TRADE")
+	var summary := HFlowContainer.new()
+	summary.add_theme_constant_override("h_separation", 8)
+	summary.add_theme_constant_override("v_separation", 8)
+	body.add_child(summary)
+	summary.add_child(_stat_card("ACTIVE MINE SITES", str(GameState.mining_sites.size()), "NATIONAL OPERATIONS"))
+	summary.add_child(_stat_card("MINING WORKFORCE", _format_format_number(GameState.mining_jobs), "DIRECT MINE EMPLOYMENT"))
+	summary.add_child(_stat_card("MONTHLY SALES VALUE", _money(GameState.monthly_mining_revenue), "ESTIMATED OUTPUT VALUE"))
+	summary.add_child(_stat_card("MINING TAX", "%.1f%%" % (GameState.mining_tax_rate * 100.0), "RESOURCE EXTRACTION LEVY"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	var sections := VBoxContainer.new()
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_theme_constant_override("separation", 9)
+	scroll.add_child(sections)
+	sections.add_child(_section_label("NATIONAL RESOURCE RESERVES  /  ABSTRACT GAME UNITS"))
+	for resource in GameState.mining_resources:
+		var reserve := float(GameState.resource_reserves.get(resource, 0.0))
+		var stock := float(GameState.resource_inventory.get(resource, 0.0))
+		var output := float(GameState.resource_production.get(resource, 0.0))
+		var price := float(GameState.resource_market_prices.get(resource, 0.0))
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 8)
+		sections.add_child(line)
+		var info := Label.new()
+		info.text = "%s  •  %.2f reserve  •  %.2f stock  •  %.2f/month  •  %s/unit" % [resource.replace("_", " ").to_upper(), reserve, stock, output, _money(price)]
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_color_override("font_color", TEXT)
+		line.add_child(info)
+		line.add_child(_button("SURVEY  %s" % _money(GameState.resource_exploration_cost(resource)), BLUE, func(kind: String = resource):
+			if GameState.explore_resource(kind):
+				_show_mining()
+			else:
+				_show_toast("Survey unavailable: insufficient funds or exploration limit reached.")
+		))
+		line.add_child(_button("OPEN MINE  %s" % _money(GameState.mine_construction_cost(resource)), GREEN, func(kind: String = resource):
+			var region_name := "National Territory"
+			var regions := GameState.get_regions()
+			if not regions.is_empty():
+				region_name = str(regions[0].get("name", region_name))
+			if GameState.open_mine(kind, region_name):
+				_show_mining()
+			else:
+				_show_toast("Mine construction unavailable: discover reserves and check treasury.")
+		))
+	sections.add_child(_section_label("MINE REGISTER  /  %d SITES" % GameState.mining_sites.size()))
+	if GameState.mining_sites.is_empty():
+		sections.add_child(_muted_label("No mines established. Run a geological survey, then construct a mine."))
+	else:
+		for site in GameState.mining_sites:
+			var site_id := str(site.get("id", ""))
+			var resource_name := str(site.get("resource", "unknown"))
+			sections.add_child(_button("%s  •  %s  •  LEVEL %d  •  %.2f capacity/month  •  %s workers  •  UPGRADE %s" % [site_id, str(site.get("region", "Region")), int(site.get("level", 1)), float(site.get("capacity", 0.0)), _format_format_number(int(site.get("workers", 0))), _money(GameState.mine_upgrade_cost(site_id))], PANEL_ALT, func(id: String = site_id):
+				if GameState.upgrade_mine(id):
+					_show_mining()
+				else:
+					_show_toast("Mine upgrade unavailable: insufficient treasury or level cap reached.")
+			))
+	sections.add_child(_section_label("MINING FISCAL POLICY"))
+	var tax_slider := HSlider.new()
+	tax_slider.min_value = 2
+	tax_slider.max_value = 30
+	tax_slider.step = 1
+	tax_slider.value = GameState.mining_tax_rate * 100.0
+	sections.add_child(tax_slider)
+	var tax_label := _muted_label("Extraction tax: %.0f%%" % tax_slider.value)
+	sections.add_child(tax_label)
+	tax_slider.value_changed.connect(func(value: float): tax_label.text = "Extraction tax: %.0f%%" % value)
+	sections.add_child(_button("APPLY MINING TAX POLICY", BLUE, func():
+		GameState.set_mining_tax(tax_slider.value / 100.0)
+		_show_mining()
+	))
+	sections.add_child(_section_label("INTERNATIONAL RESOURCE MARKET"))
+	var partner := OptionButton.new()
+	partner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for nation in GameState.ai_countries:
+		partner.add_item("%s  •  %s" % [str(nation.get("flag", "")), str(nation.get("name", "Nation"))])
+		partner.set_item_metadata(partner.item_count - 1, str(nation.get("id", "")))
+	sections.add_child(partner)
+	var resource_choice := OptionButton.new()
+	for resource in GameState.mining_resources:
+		resource_choice.add_item(resource.replace("_", " ").capitalize())
+		resource_choice.set_item_metadata(resource_choice.item_count - 1, resource)
+	sections.add_child(resource_choice)
+	var quantity := SpinBox.new()
+	quantity.min_value = 0.1
+	quantity.max_value = 100000.0
+	quantity.step = 0.1
+	quantity.value = 1.0
+	sections.add_child(quantity)
+	var trade_buttons := HBoxContainer.new()
+	trade_buttons.add_child(_button("EXPORT RESOURCE", GREEN, func():
+		if partner.item_count > 0 and resource_choice.item_count > 0:
+			var country_id := str(partner.get_item_metadata(partner.selected))
+			var resource_id := str(resource_choice.get_item_metadata(resource_choice.selected))
+			if GameState.trade_natural_resource_with_country(country_id, resource_id, "export", quantity.value):
+				_show_mining()
+			else:
+				_show_toast("Export failed: trade pact, stock or partner funds may be missing.")
+	))
+	trade_buttons.add_child(_button("IMPORT RESOURCE", BLUE, func():
+		if partner.item_count > 0 and resource_choice.item_count > 0:
+			var country_id := str(partner.get_item_metadata(partner.selected))
+			var resource_id := str(resource_choice.get_item_metadata(resource_choice.selected))
+			if GameState.trade_natural_resource_with_country(country_id, resource_id, "import", quantity.value):
+				_show_mining()
+			else:
+				_show_toast("Import failed: trade pact, partner stock or treasury may be missing.")
+	))
+	sections.add_child(trade_buttons)
+	sections.add_child(_muted_label("REPORT  /  " + GameState.mining_report))
+	sections.add_child(_muted_label("Deposit sizes, commodity prices, AI inventories and extraction volumes are abstract gameplay values, not verified geological reserves or live market quotations. Mines increase pollution; environmental policy can offset some pressure. Resource trade requires an active bilateral trade agreement and no war or sanctions."))
 	body.add_child(_button("BACK TO NATION", PANEL_ALT, _show_dashboard))
 
 func _show_energy() -> void:
