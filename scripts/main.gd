@@ -226,12 +226,12 @@ func _show_country_select() -> void:
 	list.add_theme_constant_override("separation", 7)
 	list_scroll.add_child(list)
 	var list_title := Label.new()
-	list_title.text = "COUNTRY DATABASE  •  %d NATIONS / AREAS" % GameState.country_catalog.size()
+	list_title.text = _id_text("COUNTRY DATABASE  •  %d NATIONS / AREAS" % GameState.country_catalog.size())
 	list_title.add_theme_color_override("font_color", CYAN)
 	list_title.add_theme_font_size_override("font_size", 11)
 	list.add_child(list_title)
 	var search := LineEdit.new()
-	search.placeholder_text = "Search country or ISO code..."
+	search.placeholder_text = _id_text("Search country or ISO code...")
 	search.text = country_search_text
 	search.clear_button_enabled = true
 	search.text_changed.connect(_on_country_search_changed)
@@ -2443,7 +2443,46 @@ func _id_text(value: String) -> String:
 		"ANNUAL": "TAHUNAN",
 		"OFFLINE": "LURING",
 		"World nations": "Negara-negara dunia",
-		"International trade": "Perdagangan internasional"
+		"International trade": "Perdagangan internasional",
+		"National budget": "Anggaran negara",
+		"Choose your nation": "Pilih negaramu",
+		"Search country or ISO code...": "Cari negara atau kode ISO...",
+		"COUNTRY DATABASE": "DATABASE NEGARA",
+		"NATIONS / AREAS": "NEGARA / WILAYAH",
+		"Capital": "Ibu kota",
+		"Population": "Populasi",
+		"GDP": "PDB",
+		"Currency": "Mata uang",
+		"Not listed": "Tidak tersedia",
+		"Source baseline": "Data dasar",
+		"approx.": "sekitar",
+		"Some capitals and currencies are not yet catalogued.": "Sebagian data ibu kota dan mata uang belum tersedia.",
+		"Country database could not be loaded.": "Database negara gagal dimuat.",
+		"No matching country found.": "Negara tidak ditemukan.",
+		"START SIMULATION": "MULAI SIMULASI",
+		"BACK": "KEMBALI",
+		"OFFLINE": "LURING",
+		"National Overview": "Ringkasan Nasional",
+		"Annual": "Tahunan",
+		"Monthly": "Bulanan",
+		"Government": "Pemerintahan",
+		"Economy": "Ekonomi",
+		"Development": "Pembangunan",
+		"Apply": "Terapkan",
+		"Upgrade": "Tingkatkan",
+		"Build": "Bangun",
+		"Launch": "Luncurkan",
+		"Research": "Riset",
+		"Budget": "Anggaran",
+		"Policy": "Kebijakan",
+		"Status": "Status",
+		"Report": "Laporan",
+		"History": "Riwayat",
+		"Available": "Tersedia",
+		"Locked": "Terkunci",
+		"Population:": "Populasi:",
+		"Capital:": "Ibu kota:",
+		"Currency:": "Mata uang:"
 	}
 	for english in translations:
 		result = result.replace(english, translations[english])
@@ -2495,7 +2534,7 @@ func _section_label(text_value: String) -> Label:
 
 func _muted_label(text_value: String) -> Label:
 	var label := Label.new()
-	label.text = text_value
+	label.text = _id_text(text_value)
 	label.add_theme_color_override("font_color", MUTED)
 	label.add_theme_font_size_override("font_size", 12)
 	return label
