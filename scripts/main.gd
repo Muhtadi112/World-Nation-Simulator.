@@ -20,9 +20,9 @@ var current_screen: String = "home"
 var country_search_text: String = ""
 var country_results: VBoxContainer
 var selected_diplomacy_id: String = ""
+var _startup_complete := false
 
 func _ready() -> void:
-	# Render a guaranteed startup surface before building the dynamic UI.
 	RenderingServer.set_default_clear_color(BG)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	get_viewport().size_changed.connect(_on_viewport_resized)
@@ -34,7 +34,7 @@ func _ready() -> void:
 	add_child(boot)
 	var boot_label := Label.new()
 	boot_label.name = "StartupStatus"
-	boot_label.text = "WORLD NATION SIMULATOR\\nMenyiapkan sistem dunia..."
+	boot_label.text = "WORLD NATION SIMULATOR\\nMemuat permainan..."
 	boot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	boot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	boot_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -42,15 +42,20 @@ func _ready() -> void:
 	boot_label.add_theme_font_size_override("font_size", 24)
 	boot_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(boot_label)
-	call_deferred("_finish_startup")
+	_finish_startup.call_deferred()
 
 func _finish_startup() -> void:
 	if not is_inside_tree():
 		return
+	await get_tree().process_frame
+	await get_tree().create_timer(0.15).timeout
+	if not is_inside_tree():
+		return
 	_show_home()
+	_startup_complete = true
 
 func _on_viewport_resized() -> void:
-	if is_inside_tree():
+	if is_inside_tree() and _startup_complete:
 		match current_screen:
 			"home": _show_home()
 			"countries": _show_country_select()
@@ -176,12 +181,15 @@ func _show_home() -> void:
 	map_heading.add_theme_color_override("font_color", CYAN)
 	map_heading.add_theme_font_size_override("font_size", 11)
 	map_column.add_child(map_heading)
-	var map := Control.new()
-	map.set_script(load("res://scripts/world_map.gd"))
-	map.custom_minimum_size = Vector2(0, 285)
-	map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	map_column.add_child(map)
+	var map_placeholder := Label.new()
+	map_placeholder.name = "WorldMapLoading"
+	map_placeholder.text = "Memuat peta dunia..."
+	map_placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	map_placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	map_placeholder.custom_minimum_size = Vector2(0, 285)
+	map_placeholder.add_theme_color_override("font_color", MUTED)
+	map_column.add_child(map_placeholder)
+	_mount_home_map.call_deferred(map_column, map_placeholder)
 
 	var actions := VBoxContainer.new()
 	actions.add_theme_constant_override("separation", 10)
@@ -207,6 +215,18 @@ func _show_home() -> void:
 	footer.add_theme_font_size_override("font_size", 10)
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.add_child(footer)
+
+func _mount_home_map(container: VBoxContainer, placeholder: Label) -> void:
+	await get_tree().process_frame
+	if not is_instance_valid(container) or not is_instance_valid(placeholder):
+		return
+	var map := Control.new()
+	map.set_script(load("res://scripts/world_map.gd"))
+	map.custom_minimum_size = Vector2(0, 285)
+	map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	container.add_child(map)
+	placeholder.queue_free()
 
 func _show_country_select() -> void:
 	current_screen = "countries"
