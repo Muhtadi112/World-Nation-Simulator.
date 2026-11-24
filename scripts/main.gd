@@ -183,13 +183,13 @@ func _show_home() -> void:
 	map_column.add_child(map_heading)
 	var map_placeholder := Label.new()
 	map_placeholder.name = "WorldMapLoading"
-	map_placeholder.text = "Memuat peta dunia..."
+	map_placeholder.text = "Peta dunia akan dimuat saat simulasi dibuka."
 	map_placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	map_placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	map_placeholder.custom_minimum_size = Vector2(0, 285)
 	map_placeholder.add_theme_color_override("font_color", MUTED)
 	map_column.add_child(map_placeholder)
-	_mount_home_map.call_deferred(map_column, map_placeholder)
+	# Peta dunia tidak dimuat di menu awal agar parsing GeoJSON tidak membekukan startup Android.
 
 	var actions := VBoxContainer.new()
 	actions.add_theme_constant_override("separation", 10)
